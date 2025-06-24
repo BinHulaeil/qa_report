@@ -96,6 +96,7 @@ module.exports = async function generatePdf(data, metrics) {
   } catch (error) {
     console.error(error)
   }
+	doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
   doc.fontSize(20).text('QA Test Report', { align: 'center' }).moveDown(2);
 
   // ===== SUMMARY =====
@@ -127,6 +128,7 @@ module.exports = async function generatePdf(data, metrics) {
   doc.addPage().fontSize(16).text('Detailed Test Cases:', { underline: true }).moveDown();
 
   // Table headers
+	doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
   const tableTop = doc.y;
   const colWidths = {
     test: 200,
