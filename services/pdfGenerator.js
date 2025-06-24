@@ -265,7 +265,8 @@ function addDetailedTable(doc, data) {
     
     doc.y = rowY + rowHeight;
   });
-  
+     doc.addPage();
+ 
   // Add note for additional test cases
   if (data.length > 20) {
     doc.moveDown()
@@ -275,13 +276,31 @@ function addDetailedTable(doc, data) {
   }
 }
 
-// ===== MAIN EXPORT FUNCTION =====
-module.exports = async function generatePdf(data, metrics, generalStatus) {
+function addNotes(doc, notes) {
+  if (!notes || notes.trim() === '') {
+    return; // Skip if no notes provided
+  }
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(16)
+     .fillColor('black')
+     .text('Notes:', { underline: true })
+     .moveDown(0.5);
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('black')
+     .text(notes.trim(), { align: 'justify', lineGap: 2 })
+     .moveDown(2);
+}
+// Fixed PDF generation section - add this to your generator file
+
+module.exports = async function generatePdf(data, metrics, generalStatus, notes) {
   const doc = new PDFDocument({ margin: 50 });
   const filePath = path.join(__dirname, '../reports', `report_${Date.now()}.pdf`);
   const writeStream = fs.createWriteStream(filePath);
   doc.pipe(writeStream);
-
+  
   try {
     // Add all sections
     addHeader(doc);
@@ -290,6 +309,13 @@ module.exports = async function generatePdf(data, metrics, generalStatus) {
     await addStatusChart(doc, metrics);
     await addTesterChart(doc, metrics);
     addDetailedTable(doc, data);
+    addNotes(doc, notes);
+	  
+	  if (notes && notes.trim() !== '') {
+    doc.addPage();
+    addNotes(doc, notes);
+}
+
     
     doc.end();
     
