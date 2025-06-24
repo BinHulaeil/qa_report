@@ -3,10 +3,12 @@ const fs = require('fs-extra');
 const path = require('path');
 const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
 
-const width = 500;
-const height = 300;
-const chartCanvas = new ChartJSNodeCanvas({ width, height });
-
+const chartCanvas = new ChartJSNodeCanvas({
+    width: 500,  // Increase width for higher resolution
+    height: 300,  // Increase height for higher resolution
+    backgroundColour: 'white',
+    dpi: 300,     // Set higher DPI (dots per inch)
+});
 // ===== UTILITY FUNCTIONS =====
 function calculatePercentages(statusCounts) {
   const total = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
@@ -296,7 +298,8 @@ function addNotes(doc, notes) {
 // Fixed PDF generation section - add this to your generator file
 
 module.exports = async function generatePdf(data, metrics, generalStatus, notes) {
-  const doc = new PDFDocument({ margin: 50 });
+  const doc = new PDFDocument({ margin: 50, size: 'A4',print_media_type: true,
+        dpi: 400 });
   const filePath = path.join(__dirname, '../reports', `report_${Date.now()}.pdf`);
   const writeStream = fs.createWriteStream(filePath);
   doc.pipe(writeStream);
