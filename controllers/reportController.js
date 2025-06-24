@@ -5,6 +5,7 @@ const generatePdf = require('../services/pdfGenerator');
 
 exports.handleUpload = async (req, res) => {
     const csvPath = req.file.path;
+    const generalStatus=req.query.generalStatus;
     const results = [];
 
     fs.createReadStream(csvPath)
@@ -41,7 +42,7 @@ exports.handleUpload = async (req, res) => {
                 });
 
                 // Pass data + metrics to PDF
-                const pdfPath = await generatePdf(results, metrics);
+                const pdfPath = await generatePdf(results, metrics,generalStatus);
                 res.download(pdfPath, 'QA_Report.pdf');
             } catch (err) {
                 console.error(err);

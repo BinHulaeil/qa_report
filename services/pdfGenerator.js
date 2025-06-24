@@ -6,28 +6,48 @@ const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
 const width = 500;
 const height = 300;
 const chartCanvas = new ChartJSNodeCanvas({ width, height });
+
+// ===== UTILITY FUNCTIONS =====
 function calculatePercentages(statusCounts) {
   const total = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
   const percentages = {};
 
   for (const [status, count] of Object.entries(statusCounts)) {
-    percentages[status] = ((count / total) * 100).toFixed(2); // Calculate percentage and round to 2 decimal places
+    percentages[status] = ((count / total) * 100).toFixed(2);
   }
 
   return percentages;
 }
 
+function getGeneralStatusColor(generalStatus) {
+  const statusColors = {
+    'PASSED': '#4caf50',
+    'FAILED': '#f44336',
+    'PASSED WITH ISSUES': '#ff9800'
+  };
+  return statusColors[generalStatus] || 'black';
+}
 
+function getTestStatusColor(status) {
+  const statusColors = {
+    'passed': '#4caf50',
+    'failed': '#f44336',
+    'untested': '#ff9800'
+  };
+  return statusColors[status.toLowerCase()] || 'black';
+}
+
+// ===== CHART CREATION FUNCTIONS =====
 async function createStatusChart(statusCounts) {
   const percentages = calculatePercentages(statusCounts);
 
   const labelsWithPercentages = Object.keys(statusCounts).map(status => {
     const count = statusCounts[status];
     const percentage = percentages[status];
-    return `${status} (${percentage}%)`; // Append percentage to label
+    return `${status} (${percentage}%)`;
   });
 
-const config = {
+  const config = {
     type: 'pie',
     data: {
       labels: labelsWithPercentages,
@@ -38,10 +58,10 @@ const config = {
     },
     options: {
       plugins: {
-	      legend:{
-		      display:true,
-		      position:'right'
-	      },
+        legend: {
+          display: true,
+          position: 'right'
+        },
         title: {
           display: true,
           text: 'Test Status Distribution'
@@ -50,8 +70,7 @@ const config = {
     }
   };
 
-const chartBuffer = await chartCanvas.renderToBuffer(config);
-
+  const chartBuffer = await chartCanvas.renderToBuffer(config);
   const passedPercentage = percentages.Passed;
 
   return { chartBuffer, passedPercentage };
@@ -81,54 +100,91 @@ async function createTesterChart(testsByTester) {
   return await chartCanvas.renderToBuffer(config);
 }
 
-module.exports = async function generatePdf(data, metrics) {
-  const doc = new PDFDocument({ margin: 50 });
-  const filePath = path.join(__dirname, '../reports', `report_${Date.now()}.pdf`);
-  const writeStream = fs.createWriteStream(filePath);
-  doc.pipe(writeStream);
-
-  // ===== HEADER =====
+// ===== PDF GENERATION SECTIONS =====
+function addHeader(doc) {
   const logoPath = path.join(__dirname, '../assets/logo.png');
   try {
     if (fs.existsSync(logoPath)) {
       doc.image(logoPath, 50, 40, { width: 100 });
     }
   } catch (error) {
-    console.error(error)
+    console.error('Error loading logo:', error);
   }
-	doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-  doc.fontSize(20).text('QA Test Report', { align: 'center' }).moveDown(2);
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(20)
+     .fillColor('black')
+     .text('QA Test Report', { align: 'center' })
+     .moveDown(2);
+}
 
-  // ===== SUMMARY =====
-  doc.fontSize(14).text(`Total Test Cases: ${metrics.totalCases}`);
+function addSummary(doc, metrics) {
+  doc.fontSize(14).fillColor('black');
+  doc.text(`Total Test Cases: ${metrics.totalCases}`);
   doc.text(`Passed: ${metrics.statusCounts.Passed}`);
   doc.text(`Failed: ${metrics.statusCounts.Failed}`);
   doc.text(`Untested: ${metrics.statusCounts.Untested}`);
   doc.text(`Other: ${metrics.statusCounts.Other}`);
   doc.text(`Total Bugs Reported: ${metrics.bugCount}`).moveDown();
+}
 
-  // ===== CHARTS =====
-  const { chartBuffer, passedPercentage } = await createStatusChart(metrics.statusCounts);
+function addGeneralStatus(doc, generalStatus) {
+  // Process the status string
+  const modifiedStatus = generalStatus.replace(/_/g, ' ');
+  const statusColor = getGeneralStatusColor(modifiedStatus);
+  
+  // Calculate center position for the entire text
+  const pageWidth = doc.page.width;
+  const margin = doc.page.margins.left;
+  const availableWidth = pageWidth - (margin * 2);
+  
+  // Measure text widths to center the combined text
+  const labelText = 'General Status: ';
+  const labelWidth = doc.widthOfString(labelText);
+  const statusWidth = doc.widthOfString(modifiedStatus);
+  const totalWidth = labelWidth + statusWidth;
+  const startX = margin + (availableWidth - totalWidth) / 2;
+  
+  // Add "General Status: " in black
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(20)
+     .fillColor('black')
+     .text(labelText, startX, doc.y, { continued: true });
+  
+  // Add the status itself in the appropriate color
+  doc.fillColor(statusColor)
+     .text(modifiedStatus)
+     .moveDown(2);
+}
 
-  // Add the status chart image
-  doc.image(chartBuffer, { fit: [500, 300], align: 'center' }).moveDown();
+async function addStatusChart(doc, metrics) {
+  const { chartBuffer } = await createStatusChart(metrics.statusCounts);
+  
+  // Calculate center position for the chart
+  const pageWidth = doc.page.width;
+  const margin = doc.page.margins.left;
+  const availableWidth = pageWidth - (margin * 2);
+  const chartWidth = 500;
+  const chartX = margin + (availableWidth - chartWidth) / 2;
+  
+  doc.image(chartBuffer, chartX, doc.y, { width: chartWidth, height: 300 }).moveDown();
+}
 
-  // Add the "Passed" percentage next to the chart
- // doc.fontSize(12).text(`Passed Status Percentage: ${passedPercentage}%`, {
-  //  align: 'left',
-   // continued: true
- // }).moveDown();
-
+async function addTesterChart(doc, metrics) {
   doc.addPage();
-
-  // ===== ADD TESTER CHART =====
   const testerChart = await createTesterChart(metrics.testsByTester);
   doc.image(testerChart, { fit: [500, 300], align: 'center' }).moveDown();
- // ===== TABLE SECTION =====
-  doc.addPage().fontSize(16).text('Detailed Test Cases:', { underline: true }).moveDown();
+}
 
-  // Table headers
-	doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+function addDetailedTable(doc, data) {
+  doc.addPage()
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(16)
+     .fillColor('black')
+     .text('Detailed Test Cases:', { underline: true })
+     .moveDown();
+
+  // Table configuration
   const tableTop = doc.y;
   const colWidths = {
     test: 200,
@@ -137,22 +193,24 @@ module.exports = async function generatePdf(data, metrics) {
     bugs: 130
   };
   
-  let currentX = 50;
-  
   // Draw table headers
-  doc.fontSize(12).fillColor('black');
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('black');
+  
   doc.rect(50, tableTop, 490, 25).fillColor('#f0f0f0').fill();
   doc.fillColor('black');
   
-  doc.text('Test Case', currentX + 5, tableTop + 8, { width: colWidths.test });
-  currentX += colWidths.test;
-  doc.text('Status', currentX + 5, tableTop + 8, { width: colWidths.status });
-  currentX += colWidths.status;
-  doc.text('Ticket', currentX + 5, tableTop + 8, { width: colWidths.ticket });
-  currentX += colWidths.ticket;
-  doc.text('Bugs', currentX + 5, tableTop + 8, { width: colWidths.bugs });
+  let currentX = 50;
+  const headers = ['Test Case', 'Status', 'Ticket', 'Bugs'];
+  const widths = Object.values(colWidths);
   
-  // Reset Y position for table rows
+  headers.forEach((header, index) => {
+    doc.text(header, currentX + 5, tableTop + 8, { width: widths[index] });
+    currentX += widths[index];
+  });
+  
+  // Reset position for table rows
   doc.y = tableTop + 25;
   
   // Draw table rows
@@ -161,68 +219,86 @@ module.exports = async function generatePdf(data, metrics) {
     const rowHeight = 30;
     
     // Alternate row colors
-    if (index % 2 === 0) {
-      doc.rect(50, rowY, 490, rowHeight).fillColor('#f9f9f9').fill();
-    } else {
-      doc.rect(50, rowY, 490, rowHeight).fillColor('white').fill();
-    }
+    const fillColor = index % 2 === 0 ? '#f9f9f9' : 'white';
+    doc.rect(50, rowY, 490, rowHeight).fillColor(fillColor).fill();
     
-    // Draw vertical lines for columns
+    // Draw borders
     doc.strokeColor('#ddd').lineWidth(0.5);
     let lineX = 50;
+    
+    // Vertical lines
     for (let i = 0; i <= 4; i++) {
       doc.moveTo(lineX, rowY).lineTo(lineX, rowY + rowHeight).stroke();
       if (i < 4) {
-        lineX += Object.values(colWidths)[i];
+        lineX += widths[i];
       }
     }
     
-    // Draw horizontal line
+    // Horizontal line
     doc.moveTo(50, rowY + rowHeight).lineTo(540, rowY + rowHeight).stroke();
     
-    // Add text content
-    doc.fillColor('black').fontSize(9);
+    // Add cell content
+    doc.fontSize(9);
     currentX = 50;
     
-    // Test case name (truncated if too long)
+    // Test case name
     const testName = row["Test"] || 'N/A';
-    doc.text(testName.length > 40 ? testName.substring(0, 37) + '...' : testName, 
-             currentX + 3, rowY + 8, { width: colWidths.test - 6 });
+    const truncatedTest = testName.length > 40 ? testName.substring(0, 37) + '...' : testName;
+    doc.fillColor('black').text(truncatedTest, currentX + 3, rowY + 8, { width: colWidths.test - 6 });
     currentX += colWidths.test;
     
-    // Status with color coding
+    // Status with color
     const status = row["Status"] || 'N/A';
-    let statusColor = 'black';
-    if (status.toLowerCase() === 'passed') statusColor = '#4caf50';
-    else if (status.toLowerCase() === 'failed') statusColor = '#f44336';
-    else if (status.toLowerCase() === 'untested') statusColor = '#ff9800';
-    
-    doc.fillColor(statusColor);
-    doc.text(status, currentX + 3, rowY + 8, { width: colWidths.status - 6 });
-    doc.fillColor('black');
+    const statusColor = getTestStatusColor(status);
+    doc.fillColor(statusColor).text(status, currentX + 3, rowY + 8, { width: colWidths.status - 6 });
     currentX += colWidths.status;
     
     // Ticket
     const ticket = row["Issues (case)"] || 'None';
-    doc.text(ticket, currentX + 3, rowY + 8, { width: colWidths.ticket - 6 });
+    doc.fillColor('black').text(ticket, currentX + 3, rowY + 8, { width: colWidths.ticket - 6 });
     currentX += colWidths.ticket;
     
     // Bugs
     const bugs = row["bugs"] || 'None';
-    doc.text(bugs.length > 20 ? bugs.substring(0, 17) + '...' : bugs, 
-             currentX + 3, rowY + 8, { width: colWidths.bugs - 6 });
+    const truncatedBugs = bugs.length > 20 ? bugs.substring(0, 17) + '...' : bugs;
+    doc.text(truncatedBugs, currentX + 3, rowY + 8, { width: colWidths.bugs - 6 });
     
     doc.y = rowY + rowHeight;
   });
   
-  // Add note if there are more test cases
+  // Add note for additional test cases
   if (data.length > 20) {
-    doc.moveDown().fontSize(10).fillColor('#666');
-    doc.text(`Note: Showing first 20 test cases out of ${data.length} total cases.`, { align: 'center' });
+    doc.moveDown()
+       .fontSize(10)
+       .fillColor('#666')
+       .text(`Note: Showing first 20 test cases out of ${data.length} total cases.`, { align: 'center' });
   }
+}
 
-  doc.end();
-  return new Promise(resolve => {
-    writeStream.on('finish', () => resolve(filePath));
-  });
+// ===== MAIN EXPORT FUNCTION =====
+module.exports = async function generatePdf(data, metrics, generalStatus) {
+  const doc = new PDFDocument({ margin: 50 });
+  const filePath = path.join(__dirname, '../reports', `report_${Date.now()}.pdf`);
+  const writeStream = fs.createWriteStream(filePath);
+  doc.pipe(writeStream);
+
+  try {
+    // Add all sections
+    addHeader(doc);
+    addSummary(doc, metrics);
+    addGeneralStatus(doc, generalStatus);
+    await addStatusChart(doc, metrics);
+    await addTesterChart(doc, metrics);
+    addDetailedTable(doc, data);
+    
+    doc.end();
+    
+    return new Promise((resolve, reject) => {
+      writeStream.on('finish', () => resolve(filePath));
+      writeStream.on('error', reject);
+    });
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    throw error;
+  }
 };
