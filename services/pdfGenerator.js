@@ -9,6 +9,7 @@ const chartCanvas = new ChartJSNodeCanvas({
     backgroundColour: 'white',
     dpi: 300,     // Set higher DPI (dots per inch)
 });
+
 // ===== UTILITY FUNCTIONS =====
 function calculatePercentages(statusCounts) {
   const total = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
@@ -121,13 +122,155 @@ function addHeader(doc) {
 }
 
 function addSummary(doc, metrics) {
-  doc.fontSize(14).fillColor('black');
-  doc.text(`Total Test Cases: ${metrics.totalCases}`);
-  doc.text(`Passed: ${metrics.statusCounts.Passed}`);
-  doc.text(`Failed: ${metrics.statusCounts.Failed}`);
-  doc.text(`Untested: ${metrics.statusCounts.Untested}`);
-  doc.text(`Other: ${metrics.statusCounts.Other}`);
-  doc.text(`Total Bugs Reported: ${metrics.bugCount}`).moveDown();
+  const pageWidth = doc.page.width;
+  const margin = doc.page.margins.left;
+  const availableWidth = pageWidth - (margin * 2);
+  
+  // Summary section title
+ // doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+ //    .fontSize(18)
+ //    .fillColor('#2c3e50')
+ //    .text('Test Summary', { align: 'center' })
+ //    .moveDown(1.5);
+  
+  // Create a styled box for the summary
+  const summaryBoxY = doc.y;
+  const summaryBoxHeight = 220;
+  
+  // Draw background box
+  doc.rect(margin, summaryBoxY, availableWidth, summaryBoxHeight)
+     .fillColor('#f8f9fa')
+     .fill()
+     .strokeColor('#dee2e6')
+     .lineWidth(1)
+     .stroke();
+  
+  // Position for content inside the box
+  const contentX = margin + 30;
+  const leftColumnX = contentX;
+  const rightColumnX = contentX + (availableWidth / 2);
+  
+  // Left column - Test counts
+  let currentY = summaryBoxY + 30;
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(14)
+     .fillColor('#2c3e50')
+     .text('Test Results', leftColumnX, currentY);
+  
+  currentY += 25;
+  
+  // Total cases
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('#495057')
+     .text(`Total Test Cases: `, leftColumnX, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor('#2c3e50')
+     .text(`${metrics.totalCases}`);
+  
+  currentY += 18;
+  
+  // Passed cases
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fillColor('#495057')
+     .text(`Passed: `, leftColumnX, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor('#28a745')
+     .text(`${metrics.statusCounts.Passed}`);
+  
+  currentY += 18;
+  
+  // Failed cases
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fillColor('#495057')
+     .text(`Failed: `, leftColumnX, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor('#dc3545')
+     .text(`${metrics.statusCounts.Failed}`);
+  
+  currentY += 18;
+  
+  // Untested cases
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fillColor('#495057')
+     .text(`Untested: `, leftColumnX, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor('#ffc107')
+     .text(`${metrics.statusCounts.Untested}`);
+  
+  currentY += 18;
+  
+  // Other cases
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fillColor('#495057')
+     .text(`Other: `, leftColumnX, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor('#6c757d')
+     .text(`${metrics.statusCounts.Other}`);
+  
+  // Right column - Additional Info
+  currentY = summaryBoxY + 30;
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(14)
+     .fillColor('#2c3e50')
+     .text('Additional Info', rightColumnX, currentY);
+  
+  currentY += 25;
+  
+  // Total Bugs
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('#495057')
+     .text(`Total Bugs: `, rightColumnX, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor('#dc3545')
+     .text(`${metrics.bugCount}`);
+  
+  currentY += 25;
+  
+  // Testers section
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('#495057')
+     .text(`Testers:`, rightColumnX, currentY);
+  
+  currentY += 18;
+  
+  if (metrics.testers && metrics.testers.length > 0) {
+    const testersText = metrics.testers.join(', ');
+    doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+       .fontSize(11)
+       .fillColor('#2c3e50')
+       .text(testersText, rightColumnX, currentY, { 
+         width: (availableWidth / 2) - 60, 
+         align: 'left',
+         lineGap: 3
+       });
+  } else {
+    doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+       .fontSize(11)
+       .fillColor('#6c757d')
+       .text('None specified', rightColumnX, currentY);
+  }
+  
+  // Calculate pass rate and add it at the bottom center
+  const totalTests = metrics.totalCases;
+  const passRate = totalTests > 0 ? ((metrics.statusCounts.Passed / totalTests) * 100).toFixed(1) : 0;
+  
+  const passRateY = summaryBoxY + summaryBoxHeight - 35;
+  const passRateText = `Pass Rate: ${passRate}%`;
+  const passRateWidth = doc.widthOfString(passRateText);
+  const passRateX = margin + (availableWidth - passRateWidth) / 2;
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(16)
+     .fillColor(passRate >= 80 ? '#28a745' : passRate >= 60 ? '#ffc107' : '#dc3545')
+     .text(passRateText, passRateX, passRateY);
+  
+  // Update document position
+  doc.y = summaryBoxY + summaryBoxHeight + 30;
 }
 
 function addGeneralStatus(doc, generalStatus) {
@@ -145,7 +288,7 @@ function addGeneralStatus(doc, generalStatus) {
   const labelWidth = doc.widthOfString(labelText);
   const statusWidth = doc.widthOfString(modifiedStatus);
   const totalWidth = labelWidth + statusWidth;
-  const startX = margin + (availableWidth - totalWidth) / 2;
+  const startX = (availableWidth - totalWidth) / 2;
   
   // Add "General Status: " in black
   doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
@@ -267,15 +410,6 @@ function addDetailedTable(doc, data) {
     
     doc.y = rowY + rowHeight;
   });
-     doc.addPage();
- 
-  // Add note for additional test cases
-  if (data.length > 20) {
-    doc.moveDown()
-       .fontSize(10)
-       .fillColor('#666')
-       .text(`Note: Showing first 20 test cases out of ${data.length} total cases.`, { align: 'center' });
-  }
 }
 
 function addNotes(doc, notes) {
@@ -295,30 +429,36 @@ function addNotes(doc, notes) {
      .text(notes.trim(), { align: 'justify', lineGap: 2 })
      .moveDown(2);
 }
-// Fixed PDF generation section - add this to your generator file
 
 module.exports = async function generatePdf(data, metrics, generalStatus, notes) {
-  const doc = new PDFDocument({ margin: 50, size: 'A4',print_media_type: true,
-        dpi: 400 });
+  const doc = new PDFDocument({ 
+    margin: 50, 
+    size: 'A4',
+    print_media_type: true,
+    dpi: 400 
+  });
   const filePath = path.join(__dirname, '../reports', `report_${Date.now()}.pdf`);
   const writeStream = fs.createWriteStream(filePath);
   doc.pipe(writeStream);
   
   try {
-    // Add all sections
+    // Front page: Header, Summary, and General Status only
     addHeader(doc);
     addSummary(doc, metrics);
     addGeneralStatus(doc, generalStatus);
-    await addStatusChart(doc, metrics);
-    await addTesterChart(doc, metrics);
-    addDetailedTable(doc, data);
-    addNotes(doc, notes);
-	  
-	  if (notes && notes.trim() !== '') {
+    
+    // Second page: Status chart
     doc.addPage();
-    addNotes(doc, notes);
-}
-
+    await addStatusChart(doc, metrics);
+    
+    // Third page: Detailed table
+    addDetailedTable(doc, data);
+    
+    // Additional page for notes if provided
+    if (notes && notes.trim() !== '') {
+      doc.addPage();
+      addNotes(doc, notes);
+    }
     
     doc.end();
     

@@ -5,8 +5,8 @@ const generatePdf = require('../services/pdfGenerator');
 
 exports.handleUpload = async (req, res) => {
     const csvPath = req.file.path;
-    const generalStatus = req.body.generalStatus || req.query.generalStatus; // Support both body and query
-    const notes = req.body.notes || req.query.notes  ; // Support both body and query, default to empty string
+    const generalStatus = req.body.generalStatus || req.query.generalStatus;
+    const notes = req.body.notes || req.query.notes;
     
     const results = [];
     
@@ -20,9 +20,13 @@ exports.handleUpload = async (req, res) => {
                     totalCases: results.length,
                     statusCounts: { Passed: 0, Failed: 0, Untested: 0, Other: 0 },
                     bugCount: 0,
+                    testers: [], // Array of unique tester names
                     testsByTester: {},
                     testsByDate: {},
                 };
+                
+                // Set to track unique testers
+                const uniqueTesters = new Set();
                 
                 results.forEach(row => {
                     const status = (row["Status"] || "Other").trim();
@@ -39,9 +43,15 @@ exports.handleUpload = async (req, res) => {
                     const tester = row["Created by"] || "Unknown";
                     metrics.testsByTester[tester] = (metrics.testsByTester[tester] || 0) + 1;
                     
+                    // Add tester to unique set
+                    uniqueTesters.add(tester);
+                    
                     const date = row["Created at"] ? row["Created at"].split("T")[0] : "Unknown";
                     metrics.testsByDate[date] = (metrics.testsByDate[date] || 0) + 1;
                 });
+                
+                // Convert Set to Array for easier use in PDF generation
+                metrics.testers = Array.from(uniqueTesters);
                 
                 // Pass data + metrics + generalStatus + notes to PDF
                 const pdfPath = await generatePdf(results, metrics, generalStatus, notes);
