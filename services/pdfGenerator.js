@@ -182,7 +182,7 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
      .text('General Status:', summaryX + 25, contentY + 35);
   
   doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(16)
+     .fontSize(12)
      .fillColor(statusColor)
      .text(modifiedStatus, summaryX + 25, contentY + 55);
   
@@ -232,7 +232,7 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
   
   if (metrics.testers && metrics.testers.length > 0) {
     const testersText = metrics.testers.join(', ');
-    doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+    doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
        .fontSize(10)
        .fillColor('#2c3e50')
        .text(testersText, summaryX + 20, testersY + 15, { 
