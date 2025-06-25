@@ -4,10 +4,10 @@ const path = require('path');
 const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
 
 const chartCanvas = new ChartJSNodeCanvas({
-    width: 500,  // Increase width for higher resolution
-    height: 300,  // Increase height for higher resolution
+    width: 800,  // Increased from 600 for better readability
+    height: 600,  // Increased from 400 for better readability
     backgroundColour: 'white',
-    dpi: 300,     // Set higher DPI (dots per inch)
+    dpi: 300,
 });
 
 // ===== UTILITY FUNCTIONS =====
@@ -63,11 +63,20 @@ async function createStatusChart(statusCounts) {
       plugins: {
         legend: {
           display: true,
-          position: 'right'
+          position: 'bottom',
+          labels: {
+            font: {
+              size: 18  // Increased from 12
+            }
+          }
         },
         title: {
           display: true,
-          text: 'Test Status Distribution'
+          text: 'Test Status Distribution',
+          font: {
+            size: 22,  // Increased from 18
+            weight: 'bold'
+          }
         }
       }
     }
@@ -79,384 +88,451 @@ async function createStatusChart(statusCounts) {
   return { chartBuffer, passedPercentage };
 }
 
-async function createTesterChart(testsByTester) {
-  const config = {
-    type: 'bar',
-    data: {
-      labels: Object.keys(testsByTester),
-      datasets: [{
-        label: 'Tests by Tester',
-        data: Object.values(testsByTester),
-        backgroundColor: '#2196f3'
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      plugins: {
-        title: {
-          display: true,
-          text: 'Tests by Tester'
-        }
-      }
-    }
-  };
-  return await chartCanvas.renderToBuffer(config);
-}
-
 // ===== PDF GENERATION SECTIONS =====
 function addHeader(doc) {
+  const pageWidth = doc.page.width;
+  const margin = doc.page.margins.left;
+  const availableWidth = pageWidth - (margin * 2);
+  
+  // Logo section
   const logoPath = path.join(__dirname, '../assets/logo.png');
   try {
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 50, 40, { width: 100 });
+      doc.image(logoPath, margin, 40, { width: 120 });
     }
   } catch (error) {
     console.error('Error loading logo:', error);
   }
   
+  // Title section (center-aligned for landscape)
   doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(20)
-     .fillColor('black')
-     .text('QA Test Report', { align: 'center' })
-     .moveDown(2);
+     .fontSize(18)
+     .fillColor('#2c3e50')
+     .text('Test Summary Report', 0, 50, { width: pageWidth, align: 'center' });
+  
+  // Date section (center-aligned under title)
+  const currentDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('#6c757d')
+     .text(currentDate, 0, 75, { width: pageWidth, align: 'center' });
+  
+  // Add a horizontal line separator
+  doc.moveTo(margin, 110)
+     .lineTo(pageWidth - margin, 110)
+     .strokeColor('#dee2e6')
+     .lineWidth(2)
+     .stroke();
+  
+  doc.y = 130; // Set position after header
 }
 
-function addSummary(doc, metrics) {
+function addSubTitle(doc){
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(20)
+     .fillColor('#2c3e50')
+     .text('Quality Assurance - Portfolio Control', {align: 'center' });
+  doc.moveDown(0.5);
+}
+
+function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
   const pageWidth = doc.page.width;
   const margin = doc.page.margins.left;
   const availableWidth = pageWidth - (margin * 2);
   
-  // Summary section title
- // doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
- //    .fontSize(18)
- //    .fillColor('#2c3e50')
- //    .text('Test Summary', { align: 'center' })
- //    .moveDown(1.5);
+  // Adjusted layout - make chart column wider
+  const leftColumnWidth = Math.floor(availableWidth * 0.25); // 25% for summary
+  const chartColumnWidth = Math.floor(availableWidth * 0.50); // 50% for chart (increased)
+  const rightColumnWidth = Math.floor(availableWidth * 0.25); // 25% for stats
   
-  // Create a styled box for the summary
-  const summaryBoxY = doc.y;
-  const summaryBoxHeight = 220;
+  const summaryX = margin;
+  const chartX = margin + leftColumnWidth + 15;
+  const statsX = margin + leftColumnWidth + chartColumnWidth + 30;
   
-  // Draw background box
-  doc.rect(margin, summaryBoxY, availableWidth, summaryBoxHeight)
+  const contentY = doc.y;
+  const sectionHeight = 400; // Increased height for better chart display
+  
+  // ===== LEFT COLUMN: General Status & Basic Info =====
+  doc.rect(summaryX, contentY, leftColumnWidth, sectionHeight)
      .fillColor('#f8f9fa')
      .fill()
      .strokeColor('#dee2e6')
      .lineWidth(1)
      .stroke();
   
-  // Position for content inside the box
-  const contentX = margin + 30;
-  const leftColumnX = contentX;
-  const rightColumnX = contentX + (availableWidth / 2);
+  // General Status
+  const modifiedStatus = generalStatus.replace(/_/g, ' ');
+  const statusColor = getGeneralStatusColor(modifiedStatus);
   
-  // Left column - Test counts
-  let currentY = summaryBoxY + 30;
+  const statusBoxHeight = 70;
+  doc.rect(summaryX + 15, contentY + 20, leftColumnWidth - 30, statusBoxHeight)
+     .fillColor('white')
+     .fill()
+     .strokeColor(statusColor)
+     .lineWidth(3)
+     .stroke();
   
-  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(14)
-     .fillColor('#2c3e50')
-     .text('Test Results', leftColumnX, currentY);
-  
-  currentY += 25;
-  
-  // Total cases
   doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
      .fontSize(12)
      .fillColor('#495057')
-     .text(`Total Test Cases: `, leftColumnX, currentY, { continued: true })
+     .text('General Status:', summaryX + 25, contentY + 35);
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(16)
+     .fillColor(statusColor)
+     .text(modifiedStatus, summaryX + 25, contentY + 55);
+  
+  // Pass Rate
+  const totalTests = metrics.totalCases;
+  const passRate = totalTests > 0 ? ((metrics.statusCounts.Passed / totalTests) * 100).toFixed(1) : 0;
+  
+  let currentY = contentY + 110;
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(14)
+     .fillColor('#2c3e50')
+     .text('Overview', summaryX + 20, currentY);
+  
+  currentY += 30;
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('#495057')
+     .text('Pass Rate: ', summaryX + 20, currentY, { continued: true })
+     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fillColor(passRate >= 80 ? '#28a745' : passRate >= 60 ? '#ffc107' : '#dc3545')
+     .text(`${passRate}%`);
+  
+  currentY += 25;
+  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+     .fontSize(12)
+     .fillColor('#495057')
+     .text('Total Cases: ', summaryX + 20, currentY, { continued: true })
      .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
      .fillColor('#2c3e50')
      .text(`${metrics.totalCases}`);
   
-  currentY += 18;
-  
-  // Passed cases
-  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-     .fillColor('#495057')
-     .text(`Passed: `, leftColumnX, currentY, { continued: true })
-     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fillColor('#28a745')
-     .text(`${metrics.statusCounts.Passed}`);
-  
-  currentY += 18;
-  
-  // Failed cases
-  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-     .fillColor('#495057')
-     .text(`Failed: `, leftColumnX, currentY, { continued: true })
-     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fillColor('#dc3545')
-     .text(`${metrics.statusCounts.Failed}`);
-  
-  currentY += 18;
-  
-  // Untested cases
-  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-     .fillColor('#495057')
-     .text(`Untested: `, leftColumnX, currentY, { continued: true })
-     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fillColor('#ffc107')
-     .text(`${metrics.statusCounts.Untested}`);
-  
-  currentY += 18;
-  
-  // Other cases
-  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-     .fillColor('#495057')
-     .text(`Other: `, leftColumnX, currentY, { continued: true })
-     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fillColor('#6c757d')
-     .text(`${metrics.statusCounts.Other}`);
-  
-  // Right column - Additional Info
-  currentY = summaryBoxY + 30;
-  
-  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(14)
-     .fillColor('#2c3e50')
-     .text('Additional Info', rightColumnX, currentY);
-  
   currentY += 25;
-  
-  // Total Bugs
   doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
      .fontSize(12)
      .fillColor('#495057')
-     .text(`Total Bugs: `, rightColumnX, currentY, { continued: true })
+     .text('Total Bugs: ', summaryX + 20, currentY, { continued: true })
      .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
      .fillColor('#dc3545')
      .text(`${metrics.bugCount}`);
   
-  currentY += 25;
-  
   // Testers section
+  const testersY = contentY + sectionHeight - 80;
   doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-     .fontSize(12)
+     .fontSize(11)
      .fillColor('#495057')
-     .text(`Testers:`, rightColumnX, currentY);
-  
-  currentY += 18;
+     .text('Testers:', summaryX + 20, testersY);
   
   if (metrics.testers && metrics.testers.length > 0) {
     const testersText = metrics.testers.join(', ');
     doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-       .fontSize(11)
+       .fontSize(10)
        .fillColor('#2c3e50')
-       .text(testersText, rightColumnX, currentY, { 
-         width: (availableWidth / 2) - 60, 
+       .text(testersText, summaryX + 20, testersY + 15, { 
+         width: leftColumnWidth - 40, 
          align: 'left',
-         lineGap: 3
+         lineGap: 2
        });
-  } else {
-    doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
-       .fontSize(11)
-       .fillColor('#6c757d')
-       .text('None specified', rightColumnX, currentY);
   }
   
-  // Calculate pass rate and add it at the bottom center
-  const totalTests = metrics.totalCases;
-  const passRate = totalTests > 0 ? ((metrics.statusCounts.Passed / totalTests) * 100).toFixed(1) : 0;
+  // ===== MIDDLE COLUMN: Chart (Now Larger) =====
+  doc.rect(chartX, contentY, chartColumnWidth, sectionHeight)
+     .fillColor('#ffffff')
+     .fill()
+     .strokeColor('#dee2e6')
+     .lineWidth(1)
+     .stroke();
   
-  const passRateY = summaryBoxY + summaryBoxHeight - 35;
-  const passRateText = `Pass Rate: ${passRate}%`;
-  const passRateWidth = doc.widthOfString(passRateText);
-  const passRateX = margin + (availableWidth - passRateWidth) / 2;
+  // Store chart position for later use - with more space
+  doc._chartX = chartX + 20;
+  doc._chartY = contentY + 20;
+  doc._chartWidth = chartColumnWidth - 40;
+  doc._chartHeight = sectionHeight - 40;
+  
+  // ===== RIGHT COLUMN: Detailed Statistics =====
+  doc.rect(statsX, contentY, rightColumnWidth, sectionHeight)
+     .fillColor('#f8f9fa')
+     .fill()
+     .strokeColor('#dee2e6')
+     .lineWidth(1)
+     .stroke();
   
   doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(16)
-     .fillColor(passRate >= 80 ? '#28a745' : passRate >= 60 ? '#ffc107' : '#dc3545')
-     .text(passRateText, passRateX, passRateY);
+     .fontSize(14)
+     .fillColor('#2c3e50')
+     .text('Test Breakdown', statsX + 20, contentY + 20);
+  
+  currentY = contentY + 50;
+  const stats = [
+    { label: 'Passed', value: metrics.statusCounts.Passed, color: '#28a745' },
+    { label: 'Failed', value: metrics.statusCounts.Failed, color: '#dc3545' },
+    { label: 'Untested', value: metrics.statusCounts.Untested, color: '#ffc107' },
+    { label: 'Other', value: metrics.statusCounts.Other, color: '#6c757d' }
+  ];
+  
+  stats.forEach((stat, index) => {
+    const y = currentY + (index * 35);
+    const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
+    
+    doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+       .fontSize(12)
+       .fillColor('#495057')
+       .text(`${stat.label}:`, statsX + 40, y + 2);
+    
+    doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+       .fontSize(12)
+       .fillColor(stat.color)
+       .text(`${stat.value} (${percentage}%)`, statsX + 40, y + 16);
+  });
   
   // Update document position
-  doc.y = summaryBoxY + summaryBoxHeight + 30;
+  doc.y = contentY + sectionHeight + 30;
 }
 
-function addGeneralStatus(doc, generalStatus) {
-  // Process the status string
-  const modifiedStatus = generalStatus.replace(/_/g, ' ');
-  const statusColor = getGeneralStatusColor(modifiedStatus);
-  
-  // Calculate center position for the entire text
-  const pageWidth = doc.page.width;
-  const margin = doc.page.margins.left;
-  const availableWidth = pageWidth - (margin * 2);
-  
-  // Measure text widths to center the combined text
-  const labelText = 'General Status: ';
-  const labelWidth = doc.widthOfString(labelText);
-  const statusWidth = doc.widthOfString(modifiedStatus);
-  const totalWidth = labelWidth + statusWidth;
-  const startX = (availableWidth - totalWidth) / 2;
-  
-  // Add "General Status: " in black
-  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(20)
-     .fillColor('black')
-     .text(labelText, startX, doc.y, { continued: true });
-  
-  // Add the status itself in the appropriate color
-  doc.fillColor(statusColor)
-     .text(modifiedStatus)
-     .moveDown(2);
-}
-
-async function addStatusChart(doc, metrics) {
+async function addLandscapeChart(doc, metrics) {
   const { chartBuffer } = await createStatusChart(metrics.statusCounts);
   
-  // Calculate center position for the chart
+  // Use stored chart position
+  const chartX = doc._chartX;
+  const chartY = doc._chartY;
+  const maxWidth = doc._chartWidth;
+  const maxHeight = doc._chartHeight;
+  
+  // Calculate chart size maintaining aspect ratio - use larger base size
+  const chartAspectRatio = 800 / 600; // Updated aspect ratio from new canvas size
+  let chartWidth = maxWidth;
+  let chartHeight = chartWidth / chartAspectRatio;
+  
+  if (chartHeight > maxHeight) {
+    chartHeight = maxHeight;
+    chartWidth = chartHeight * chartAspectRatio;
+  }
+  
+  // Center the chart in the available space
+  const finalX = chartX + (maxWidth - chartWidth) / 2;
+  const finalY = chartY + (maxHeight - chartHeight) / 2;
+  
+  doc.image(chartBuffer, finalX, finalY, { 
+    width: chartWidth, 
+    height: chartHeight 
+  });
+  
+  // Clean up stored properties
+  delete doc._chartX;
+  delete doc._chartY;
+  delete doc._chartWidth;
+  delete doc._chartHeight;
+}
+
+function addLandscapeDetailedTable(doc, data) {
+  doc.addPage();
+  
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+     .fontSize(18)
+     .fillColor('black')
+     .text('Detailed Test Cases', { align: 'center' })
+     .moveDown(0.5);
+
+  // Enhanced table configuration for landscape
   const pageWidth = doc.page.width;
   const margin = doc.page.margins.left;
   const availableWidth = pageWidth - (margin * 2);
-  const chartWidth = 500;
-  const chartX = margin + (availableWidth - chartWidth) / 2;
   
-  doc.image(chartBuffer, chartX, doc.y, { width: chartWidth, height: 300 }).moveDown();
-}
-
-async function addTesterChart(doc, metrics) {
-  doc.addPage();
-  const testerChart = await createTesterChart(metrics.testsByTester);
-  doc.image(testerChart, { fit: [500, 300], align: 'center' }).moveDown();
-}
-
-function addDetailedTable(doc, data) {
-  doc.addPage()
-     .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(16)
-     .fillColor('black')
-     .text('Detailed Test Cases:', { underline: true })
-     .moveDown();
-
-  // Table configuration
   const tableTop = doc.y;
   const colWidths = {
-    test: 200,
-    status: 80,
-    ticket: 80,
-    bugs: 130
+    test: Math.floor(availableWidth * 0.45),    // 45% for test name (increased)
+    status: Math.floor(availableWidth * 0.15),  // 15% for status (increased)
+    ticket: Math.floor(availableWidth * 0.18),  // 18% for ticket (increased)
+    bugs: Math.floor(availableWidth * 0.22)     // 22% for bugs (decreased slightly)
   };
   
-  // Draw table headers
-  doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+  const totalTableWidth = Object.values(colWidths).reduce((sum, width) => sum + width, 0);
+  
+  // Draw table headers with proper styling
+  const headerHeight = 35; // Increased header height
+  
+  // Draw header background
+  doc.rect(margin, tableTop, totalTableWidth, headerHeight)
+     .fillColor('#2c3e50')
+     .fill();
+  
+  // Set text properties for headers
+  doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
      .fontSize(12)
-     .fillColor('black');
+     .fillColor('white'); // Ensure white text color
   
-  doc.rect(50, tableTop, 490, 25).fillColor('#f0f0f0').fill();
-  doc.fillColor('black');
-  
-  let currentX = 50;
+  let currentX = margin;
   const headers = ['Test Case', 'Status', 'Ticket', 'Bugs'];
   const widths = Object.values(colWidths);
   
   headers.forEach((header, index) => {
-    doc.text(header, currentX + 5, tableTop + 8, { width: widths[index] });
+    // Add text with proper vertical centering
+    const textY = tableTop + (headerHeight - 12) / 2; // Center text vertically
+    doc.text(header, currentX + 8, textY, { 
+      width: widths[index] - 16,
+      align: 'left'
+    });
     currentX += widths[index];
   });
   
-  // Reset position for table rows
-  doc.y = tableTop + 25;
+  // Draw header border
+  doc.strokeColor('#dee2e6')
+     .lineWidth(1)
+     .rect(margin, tableTop, totalTableWidth, headerHeight)
+     .stroke();
   
-  // Draw table rows
-  data.slice(0, 20).forEach((row, index) => {
-    const rowY = doc.y;
-    const rowHeight = 30;
+  // Reset position for table rows
+  doc.y = tableTop + headerHeight;
+  
+  // Calculate how many rows can fit per page
+  const availableHeight = doc.page.height - doc.y - margin;
+  const rowHeight = 35;
+  const maxRowsPerPage = Math.floor(availableHeight / rowHeight);
+  
+  // Draw table rows with pagination
+  const totalRows = Math.min(data.length, 50); // Limit to 50 rows max
+  let currentRow = 0;
+  
+  while (currentRow < totalRows) {
+    const rowsOnThisPage = Math.min(maxRowsPerPage, totalRows - currentRow);
     
-    // Alternate row colors
-    const fillColor = index % 2 === 0 ? '#f9f9f9' : 'white';
-    doc.rect(50, rowY, 490, rowHeight).fillColor(fillColor).fill();
-    
-    // Draw borders
-    doc.strokeColor('#ddd').lineWidth(0.5);
-    let lineX = 50;
-    
-    // Vertical lines
-    for (let i = 0; i <= 4; i++) {
-      doc.moveTo(lineX, rowY).lineTo(lineX, rowY + rowHeight).stroke();
-      if (i < 4) {
-        lineX += widths[i];
+    for (let i = 0; i < rowsOnThisPage; i++) {
+      const row = data[currentRow + i];
+      const rowY = doc.y;
+      
+      // Alternate row colors
+      const fillColor = i % 2 === 0 ? '#f8f9fa' : 'white';
+      doc.rect(margin, rowY, totalTableWidth, rowHeight).fillColor(fillColor).fill();
+      
+      // Draw cell borders
+      doc.strokeColor('#dee2e6').lineWidth(0.5);
+      let lineX = margin;
+      
+      // Vertical lines
+      for (let j = 0; j <= 4; j++) {
+        doc.moveTo(lineX, rowY).lineTo(lineX, rowY + rowHeight).stroke();
+        if (j < 4) {
+          lineX += widths[j];
+        }
       }
+      
+      // Horizontal line
+      doc.moveTo(margin, rowY + rowHeight).lineTo(margin + totalTableWidth, rowY + rowHeight).stroke();
+      
+      // Add cell content
+      doc.fontSize(10);
+      currentX = margin;
+      
+      // Test case name
+      const testName = row["Test"] || 'N/A';
+      const maxTestChars = Math.floor(colWidths.test / 6); // Approximate chars that fit
+      const truncatedTest = testName.length > maxTestChars ? testName.substring(0, maxTestChars - 3) + '...' : testName;
+      doc.fillColor('black').text(truncatedTest, currentX + 8, rowY + 10, { width: colWidths.test - 16 });
+      currentX += colWidths.test;
+      
+      // Status with color
+      const status = row["Status"] || 'N/A';
+      const statusColor = getTestStatusColor(status);
+      doc.fillColor(statusColor)
+         .font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
+         .text(status, currentX + 8, rowY + 10, { width: colWidths.status - 16 });
+      currentX += colWidths.status;
+      
+      // Ticket
+      const ticket = row["Issues (case)"] || 'None';
+      doc.fillColor('black')
+         .font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
+         .text(ticket, currentX + 8, rowY + 10, { width: colWidths.ticket - 16 });
+      currentX += colWidths.ticket;
+      
+      // Bugs
+      const bugs = row["bugs"] || 'None';
+      const maxBugChars = Math.floor(colWidths.bugs / 6);
+      const truncatedBugs = bugs.length > maxBugChars ? bugs.substring(0, maxBugChars - 3) + '...' : bugs;
+      doc.text(truncatedBugs, currentX + 8, rowY + 10, { width: colWidths.bugs - 16 });
+      
+      doc.y = rowY + rowHeight;
     }
     
-    // Horizontal line
-    doc.moveTo(50, rowY + rowHeight).lineTo(540, rowY + rowHeight).stroke();
+    currentRow += rowsOnThisPage;
     
-    // Add cell content
-    doc.fontSize(9);
-    currentX = 50;
-    
-    // Test case name
-    const testName = row["Test"] || 'N/A';
-    const truncatedTest = testName.length > 40 ? testName.substring(0, 37) + '...' : testName;
-    doc.fillColor('black').text(truncatedTest, currentX + 3, rowY + 8, { width: colWidths.test - 6 });
-    currentX += colWidths.test;
-    
-    // Status with color
-    const status = row["Status"] || 'N/A';
-    const statusColor = getTestStatusColor(status);
-    doc.fillColor(statusColor).text(status, currentX + 3, rowY + 8, { width: colWidths.status - 6 });
-    currentX += colWidths.status;
-    
-    // Ticket
-    const ticket = row["Issues (case)"] || 'None';
-    doc.fillColor('black').text(ticket, currentX + 3, rowY + 8, { width: colWidths.ticket - 6 });
-    currentX += colWidths.ticket;
-    
-    // Bugs
-    const bugs = row["bugs"] || 'None';
-    const truncatedBugs = bugs.length > 20 ? bugs.substring(0, 17) + '...' : bugs;
-    doc.text(truncatedBugs, currentX + 3, rowY + 8, { width: colWidths.bugs - 6 });
-    
-    doc.y = rowY + rowHeight;
-  });
+    // Add new page if there are more rows
+    if (currentRow < totalRows) {
+      doc.addPage();
+      doc.y = margin + 50; // Leave space at top of new page
+    }
+  }
 }
 
 function addNotes(doc, notes) {
   if (!notes || notes.trim() === '') {
-    return; // Skip if no notes provided
+    return;
   }
   
+  doc.addPage();
+  
   doc.font('./assets/fonts/FrutigerLTArabic-75Black.ttf')
-     .fontSize(16)
+     .fontSize(18)
      .fillColor('black')
-     .text('Notes:', { underline: true })
-     .moveDown(0.5);
+     .text('Notes', { align: 'center' })
+     .moveDown(1);
+  
+  // Create a bordered box for notes in landscape
+  const pageWidth = doc.page.width;
+  const margin = doc.page.margins.left;
+  const availableWidth = pageWidth - (margin * 2);
+  const notesHeight = 400;
+  
+  doc.rect(margin, doc.y, availableWidth, notesHeight)
+     .fillColor('#f8f9fa')
+     .fill()
+     .strokeColor('#dee2e6')
+     .lineWidth(1)
+     .stroke();
   
   doc.font('./assets/fonts/FrutigerLTArabic-45Light.ttf')
      .fontSize(12)
      .fillColor('black')
-     .text(notes.trim(), { align: 'justify', lineGap: 2 })
-     .moveDown(2);
+     .text(notes.trim(), margin + 20, doc.y + 20, { 
+       width: availableWidth - 40,
+       align: 'justify', 
+       lineGap: 3 
+     });
 }
 
 module.exports = async function generatePdf(data, metrics, generalStatus, notes) {
+  // MAIN CHANGE: Set page size to landscape
   const doc = new PDFDocument({ 
-    margin: 50, 
+    margin: 40,          // Reduced margin for more space
     size: 'A4',
+    layout: 'landscape', // KEY CHANGE: Set to landscape
     print_media_type: true,
     dpi: 400 
   });
+  
   const filePath = path.join(__dirname, '../reports', `report_${Date.now()}.pdf`);
   const writeStream = fs.createWriteStream(filePath);
   doc.pipe(writeStream);
   
   try {
-    // Front page: Header, Summary, and General Status only
+    // Enhanced front page with landscape layout
     addHeader(doc);
-    addSummary(doc, metrics);
-    addGeneralStatus(doc, generalStatus);
+    addSubTitle(doc);
+    addLandscapeSummaryWithChart(doc, metrics, generalStatus);
+    await addLandscapeChart(doc, metrics);
     
-    // Second page: Status chart
-    doc.addPage();
-    await addStatusChart(doc, metrics);
+    // Detailed table with landscape optimization
+    addLandscapeDetailedTable(doc, data);
     
-    // Third page: Detailed table
-    addDetailedTable(doc, data);
-    
-    // Additional page for notes if provided
+    // Notes page if provided
     if (notes && notes.trim() !== '') {
-      doc.addPage();
       addNotes(doc, notes);
     }
     
