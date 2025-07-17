@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CSV to PDF Upload</title>
   <style>
+
+.emblem{
+  margin-top: 25px;
+  margin-left: 25px;
+  width: 400px;
+  height: 400px;
+  position: absolute;
+  top: 0;
+  left: 0;
+
+}
     body {
       font-family: Arial, sans-serif;
       display: flex;
@@ -37,7 +48,7 @@
     }
     button {
       padding: 10px 15px;
-      background-color: #007BFF;
+      background-color: #2d2e80 ;
       color: white;
       border: none;
       border-radius: 5px;
@@ -50,6 +61,10 @@
   </style>
 </head>
 <body>
+	<div class='emblem'>
+		<img src='/emblem.png'>
+
+	</div>
   <div class="container">
     <h2>Upload CSV and Generate PDF</h2>
     <form id="uploadForm">
@@ -90,7 +105,9 @@
       formData.append('notes', notes);
 
       // Send the request to the backend
-      fetch('http://localhost:3000/api/upload', {
+	    const apiUrl = window.location.origin; 
+
+	    fetch(`${apiUrl}/api/upload`, {
         method: 'POST',
         body: formData,
       })
@@ -122,4 +139,5 @@
   </script>
 </body>
 </html>
+
 
