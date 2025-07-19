@@ -1,7 +1,10 @@
 const express = require('express');
 const routes = require('./routes');
+
+require('dotenv').config()
+
 const app = express();
-const PORT = process.env.PORT ||3000 ;
+const PORT = process.env.PORT
 
 app.get('/', (req, res) => {
     res.sendFile('index.html', { root: './'});
@@ -12,6 +15,6 @@ app.use('/api', routes);
 app.use( express.static( "public" ) );
 
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on:${PORT}`);
 });
 

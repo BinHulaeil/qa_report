@@ -105,9 +105,10 @@
       formData.append('notes', notes);
 
       // Send the request to the backend
-	    const apiUrl = window.location.origin; 
 
-	    fetch(`${apiUrl}/api/upload`, {
+      window.apiUrl="%VITE_API_URL%"
+
+	    fetch('/api/upload', {
         method: 'POST',
         body: formData,
       })
