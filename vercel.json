@@ -1,6 +1,6 @@
 {
   "builds": [
-    { "src": "vite.config.ts", "use": "@vercel/static-build" },
+    { "src": "vite.config.js", "use": "@vercel/static-build" },
     { "src": "api/app.js", "use": "@vercel/node" }
   ],
   "routes": [
