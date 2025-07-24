@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import fs from 'fs-extra';
 import path from 'path';
+import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import { fileURLToPath } from 'url';
 
 // Get __dirname equivalent for ES modules
@@ -9,6 +10,13 @@ const __dirname = path.dirname(__filename);
 
 const primaryFont = './src/assets/fonts/FrutigerLTArabic-75Black.ttf'
 const secondaryFont='./src/assets/fonts/FrutigerLTArabic-45Light.ttf'
+
+const chartCanvas = new ChartJSNodeCanvas({
+    width: 800,
+    height: 600,
+    backgroundColour: 'white',
+    dpi: 300,
+});
 
 // ===== UTILITY FUNCTIONS =====
 function calculatePercentages(statusCounts) {
@@ -43,10 +51,49 @@ function getTestStatusColor(status) {
 // ===== CHART CREATION FUNCTIONS =====
 async function createStatusChart(statusCounts) {
     const percentages = calculatePercentages(statusCounts);
+
+    const labelsWithPercentages = Object.keys(statusCounts).map(status => {
+        const count = statusCounts[status];
+        const percentage = percentages[status];
+        return `${status} (${percentage}%)`;
+    });
+
+    const config = {
+        type: 'pie',
+        data: {
+            labels: labelsWithPercentages,
+            datasets: [{
+                data: Object.values(statusCounts),
+                backgroundColor: ['#4caf50', '#f44336', '#ff9800', '#9e9e9e'],
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        font: {
+                            size: 18
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Test Status Distribution',
+                    font: {
+                        size: 22,
+                        weight: 'bold'
+                    }
+                }
+            }
+        }
+    };
+
+    const chartBuffer = await chartCanvas.renderToBuffer(config);
     const passedPercentage = percentages.Passed;
 
-    // Return null for chart buffer since we're not generating charts
-    return { chartBuffer: null, passedPercentage };
+    return { chartBuffer, passedPercentage };
 }
 
 // ===== PDF GENERATION SECTIONS =====
@@ -105,14 +152,14 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
     const margin = doc.page.margins.left;
     const availableWidth = pageWidth - (margin * 2);
 
-    // Adjusted layout - make chart column into text/stats area
-    const leftColumnWidth = Math.floor(availableWidth * 0.35);
-    const middleColumnWidth = Math.floor(availableWidth * 0.30);
-    const rightColumnWidth = Math.floor(availableWidth * 0.35);
+    // Adjusted layout - make chart column wider
+    const leftColumnWidth = Math.floor(availableWidth * 0.25);
+    const chartColumnWidth = Math.floor(availableWidth * 0.50);
+    const rightColumnWidth = Math.floor(availableWidth * 0.25);
 
     const summaryX = margin;
-    const middleX = margin + leftColumnWidth + 15;
-    const statsX = margin + leftColumnWidth + middleColumnWidth + 30;
+    const chartX = margin + leftColumnWidth + 15;
+    const statsX = margin + leftColumnWidth + chartColumnWidth + 30;
 
     const contentY = doc.y;
     const sectionHeight = 400;
@@ -203,43 +250,19 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
         });
     }
 
-    // ===== MIDDLE COLUMN: Text-based chart replacement =====
-    doc.rect(middleX, contentY, middleColumnWidth, sectionHeight)
+    // ===== MIDDLE COLUMN: Chart (Now Larger) =====
+    doc.rect(chartX, contentY, chartColumnWidth, sectionHeight)
         .fillColor('#ffffff')
         .fill()
         .strokeColor('#dee2e6')
         .lineWidth(1)
         .stroke();
 
-    doc.font(primaryFont)
-        .fontSize(14)
-        .fillColor('#2d2e80')
-        .text('Status Distribution', middleX + 20, contentY + 20);
-
-    let chartY = contentY + 60;
-    const stats = [
-        { label: 'Passed', value: metrics.statusCounts.Passed, color: '#28a745' },
-        { label: 'Failed', value: metrics.statusCounts.Failed, color: '#dc3545' },
-        { label: 'Untested', value: metrics.statusCounts.Untested, color: '#ffc107' },
-        { label: 'Other', value: metrics.statusCounts.Other, color: '#6c757d' }
-    ];
-
-    stats.forEach((stat, index) => {
-        const y = chartY + (index * 60);
-        const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
-
-        // Create a visual bar representation
-        const barWidth = Math.floor((percentage / 100) * (middleColumnWidth - 80));
-
-        doc.rect(middleX + 20, y, barWidth, 20)
-            .fillColor(stat.color)
-            .fill();
-
-        doc.font(secondaryFont)
-            .fontSize(11)
-            .fillColor('#495057')
-            .text(`${stat.label}: ${stat.value} (${percentage}%)`, middleX + 20, y + 25);
-    });
+    // Store chart position for later use - with more space
+    doc._chartX = chartX + 20;
+    doc._chartY = contentY + 20;
+    doc._chartWidth = chartColumnWidth - 40;
+    doc._chartHeight = sectionHeight - 40;
 
     // ===== RIGHT COLUMN: Detailed Statistics =====
     doc.rect(statsX, contentY, rightColumnWidth, sectionHeight)
@@ -255,6 +278,12 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
         .text('Test Breakdown', statsX + 20, contentY + 20);
 
     currentY = contentY + 50;
+    const stats = [
+        { label: 'Passed', value: metrics.statusCounts.Passed, color: '#28a745' },
+        { label: 'Failed', value: metrics.statusCounts.Failed, color: '#dc3545' },
+        { label: 'Untested', value: metrics.statusCounts.Untested, color: '#ffc107' },
+        { label: 'Other', value: metrics.statusCounts.Other, color: '#6c757d' }
+    ];
 
     stats.forEach((stat, index) => {
         const y = currentY + (index * 35);
@@ -276,9 +305,38 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
 }
 
 async function addLandscapeChart(doc, metrics) {
-    // Since we removed chart generation, we'll skip this function
-    // The visual representation is now handled in addLandscapeSummaryWithChart
-    return;
+    const { chartBuffer } = await createStatusChart(metrics.statusCounts);
+
+    // Use stored chart position
+    const chartX = doc._chartX;
+    const chartY = doc._chartY;
+    const maxWidth = doc._chartWidth;
+    const maxHeight = doc._chartHeight;
+
+    // Calculate chart size maintaining aspect ratio - use larger base size
+    const chartAspectRatio = 800 / 600; // Updated aspect ratio from new canvas size
+    let chartWidth = maxWidth;
+    let chartHeight = chartWidth / chartAspectRatio;
+
+    if (chartHeight > maxHeight) {
+        chartHeight = maxHeight;
+        chartWidth = chartHeight * chartAspectRatio;
+    }
+
+    // Center the chart in the available space
+    const finalX = chartX + (maxWidth - chartWidth) / 2;
+    const finalY = chartY + (maxHeight - chartHeight) / 2;
+
+    doc.image(chartBuffer, finalX, finalY, {
+        width: chartWidth,
+        height: chartHeight
+    });
+
+    // Clean up stored properties
+    delete doc._chartX;
+    delete doc._chartY;
+    delete doc._chartWidth;
+    delete doc._chartHeight;
 }
 
 function addLandscapeDetailedTable(doc, data) {
