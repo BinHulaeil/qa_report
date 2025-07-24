@@ -48,11 +48,12 @@ export default async function handler(req, res) {
                 size: csvFile.size
             },
             body: {
-                generalStatus: fields.generalStatus?.[0],
-                notes: fields.notes?.[0],
-                ...Object.fromEntries(
-                    Object.entries(fields).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value])
-                )
+                generalStatus: fields.generalStatus?.[0] || '',
+                notes: fields.notes?.[0] || '',
+            },
+            query: {
+                generalStatus: fields.generalStatus?.[0] || '',
+                notes: fields.notes?.[0] || '',
             }
         };
 

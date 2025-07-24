@@ -7,8 +7,43 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const primaryFont = './src/assets/fonts/FrutigerLTArabic-75Black.ttf'
-const secondaryFont='./src/assets/fonts/FrutigerLTArabic-45Light.ttf'
+// Use absolute paths for fonts, with fallback
+const primaryFont = path.join(process.cwd(), 'src/assets/fonts/FrutigerLTArabic-75Black.ttf');
+const secondaryFont = path.join(process.cwd(), 'src/assets/fonts/FrutigerLTArabic-45Light.ttf');
+
+// Check if fonts exist, use built-in fonts as fallback
+const primaryFontExists = fs.existsSync(primaryFont);
+const secondaryFontExists = fs.existsSync(secondaryFont);
+
+console.log('Primary font exists:', primaryFontExists, primaryFont);
+console.log('Secondary font exists:', secondaryFontExists, secondaryFont);
+
+// Helper functions to safely set fonts
+function setPrimaryFont(doc) {
+    try {
+        if (primaryFontExists) {
+            doc.font(primaryFont);
+        } else {
+            doc.font('Helvetica-Bold');
+        }
+    } catch (error) {
+        doc.font('Helvetica-Bold');
+    }
+    return doc;
+}
+
+function setSecondaryFont(doc) {
+    try {
+        if (secondaryFontExists) {
+            doc.font(secondaryFont);
+        } else {
+            doc.font('Helvetica');
+        }
+    } catch (error) {
+        doc.font('Helvetica');
+    }
+    return doc;
+}
 
 // ===== UTILITY FUNCTIONS =====
 function calculatePercentages(statusCounts) {
@@ -53,10 +88,9 @@ async function createStatusChart(statusCounts) {
 function addHeader(doc) {
     const pageWidth = doc.page.width;
     const margin = doc.page.margins.left;
-    const availableWidth = pageWidth - (margin * 2);
 
     // Logo section
-    const logoPath = path.join( './public/logo.png');
+    const logoPath = path.join(process.cwd(), 'public/logo.png');
     try {
         if (fs.existsSync(logoPath)) {
             doc.image(logoPath, margin, 40, { width: 120 });
@@ -66,7 +100,7 @@ function addHeader(doc) {
     }
 
     // Title section (center-aligned for landscape)
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(18)
         .fillColor('#2d2e80')
         .text('Test Summary Report', 0, 50, { width: pageWidth, align: 'center' });
@@ -77,7 +111,8 @@ function addHeader(doc) {
         month: 'long',
         day: 'numeric'
     });
-    doc.font(secondaryFont)
+
+    setSecondaryFont(doc)
         .fontSize(12)
         .fillColor('#6c757d')
         .text(currentDate, 0, 75, { width: pageWidth, align: 'center' });
@@ -93,7 +128,7 @@ function addHeader(doc) {
 }
 
 function addSubTitle(doc){
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(20)
         .fillColor('#2d2e80')
         .text('Quality Assurance - Portfolio Control', {align: 'center' });
@@ -137,12 +172,12 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
         .lineWidth(3)
         .stroke();
 
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(12)
         .fillColor('#495057')
         .text('General Status:', summaryX + 25, contentY + 35);
 
-    doc.font(secondaryFont)
+    setPrimaryFont(doc)
         .fontSize(12)
         .fillColor(statusColor)
         .text(modifiedStatus, summaryX + 25, contentY + 55);
@@ -152,48 +187,51 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
     const passRate = totalTests > 0 ? ((metrics.statusCounts.Passed / totalTests) * 100).toFixed(1) : 0;
 
     let currentY = contentY + 110;
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(14)
         .fillColor('#2d2e80')
         .text('Overview', summaryX + 20, currentY);
 
     currentY += 30;
-    doc.font(secondaryFont)
+    setSecondaryFont(doc)
         .fontSize(12)
         .fillColor('#495057')
-        .text('Pass Rate: ', summaryX + 20, currentY, { continued: true })
-        .font(primaryFont)
+        .text('Pass Rate: ', summaryX + 20, currentY, { continued: true });
+
+    setPrimaryFont(doc)
         .fillColor(passRate >= 80 ? '#28a745' : passRate >= 60 ? '#ffc107' : '#dc3545')
         .text(`${passRate}%`);
 
     currentY += 25;
-    doc.font(secondaryFont)
+    setSecondaryFont(doc)
         .fontSize(12)
         .fillColor('#495057')
-        .text('Total Cases: ', summaryX + 20, currentY, { continued: true })
-        .font(primaryFont)
+        .text('Total Cases: ', summaryX + 20, currentY, { continued: true });
+
+    setPrimaryFont(doc)
         .fillColor('#2d2e80')
         .text(`${metrics.totalCases}`);
 
     currentY += 25;
-    doc.font(secondaryFont)
+    setSecondaryFont(doc)
         .fontSize(12)
         .fillColor('#495057')
-        .text('Total Bugs: ', summaryX + 20, currentY, { continued: true })
-        .font(primaryFont)
+        .text('Total Bugs: ', summaryX + 20, currentY, { continued: true });
+
+    setPrimaryFont(doc)
         .fillColor('#dc3545')
         .text(`${metrics.bugCount}`);
 
     // Testers section
     const testersY = contentY + sectionHeight - 80;
-    doc.font(secondaryFont)
+    setSecondaryFont(doc)
         .fontSize(11)
         .fillColor('#495057')
         .text('Tester(s):', summaryX + 20, testersY);
 
     if (metrics.testers && metrics.testers.length > 0) {
         const testersText = metrics.testers.join(', ');
-        doc.font(primaryFont)
+        setPrimaryFont(doc)
             .fontSize(10)
             .fillColor('#2d2e80')
             .text(testersText, summaryX + 20, testersY + 15, {
@@ -211,7 +249,7 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
         .lineWidth(1)
         .stroke();
 
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(14)
         .fillColor('#2d2e80')
         .text('Status Distribution', middleX + 20, contentY + 20);
@@ -235,7 +273,7 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
             .fillColor(stat.color)
             .fill();
 
-        doc.font(secondaryFont)
+        setSecondaryFont(doc)
             .fontSize(11)
             .fillColor('#495057')
             .text(`${stat.label}: ${stat.value} (${percentage}%)`, middleX + 20, y + 25);
@@ -249,7 +287,7 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
         .lineWidth(1)
         .stroke();
 
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(14)
         .fillColor('#2d2e80')
         .text('Test Breakdown', statsX + 20, contentY + 20);
@@ -260,12 +298,12 @@ function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
         const y = currentY + (index * 35);
         const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
 
-        doc.font(secondaryFont)
+        setSecondaryFont(doc)
             .fontSize(12)
             .fillColor('#495057')
             .text(`${stat.label}:`, statsX + 40, y + 2);
 
-        doc.font(primaryFont)
+        setPrimaryFont(doc)
             .fontSize(12)
             .fillColor(stat.color)
             .text(`${stat.value} (${percentage}%)`, statsX + 40, y + 16);
@@ -284,7 +322,7 @@ async function addLandscapeChart(doc, metrics) {
 function addLandscapeDetailedTable(doc, data) {
     doc.addPage();
 
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(18)
         .fillColor('#2d2e80')
         .text('Detailed Test Cases', { align: 'center' })
@@ -314,7 +352,7 @@ function addLandscapeDetailedTable(doc, data) {
         .fill();
 
     // Set text properties for headers
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(12)
         .fillColor('white'); // Ensure white text color
 
@@ -390,15 +428,15 @@ function addLandscapeDetailedTable(doc, data) {
             // Status with color
             const status = row["Status"] || 'N/A';
             const statusColor = getTestStatusColor(status);
-            doc.fillColor(statusColor)
-                .font(primaryFont)
+            setPrimaryFont(doc)
+                .fillColor(statusColor)
                 .text(status, currentX + 8, rowY + 10, { width: colWidths.status - 16 });
             currentX += colWidths.status;
 
             // Ticket
             const ticket = row["Issues (case)"] || 'None';
-            doc.fillColor('black')
-                .font(secondaryFont)
+            setSecondaryFont(doc)
+                .fillColor('black')
                 .text(ticket, currentX + 8, rowY + 10, { width: colWidths.ticket - 16 });
             currentX += colWidths.ticket;
 
@@ -428,7 +466,7 @@ function addNotes(doc, notes) {
 
     doc.addPage();
 
-    doc.font(primaryFont)
+    setPrimaryFont(doc)
         .fontSize(18)
         .fillColor('#2d2e80')
         .text('Notes', { align: 'center' })
@@ -447,7 +485,7 @@ function addNotes(doc, notes) {
         .lineWidth(1)
         .stroke();
 
-    doc.font(secondaryFont)
+    setSecondaryFont(doc)
         .fontSize(12)
         .fillColor('black')
         .text(notes.trim(), margin + 20, doc.y + 20, {
