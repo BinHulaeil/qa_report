@@ -3,544 +3,656 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Get __dirname equivalent for ES modules
+// Constants
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use absolute paths for fonts, with fallback
-const primaryFont = path.join(process.cwd(), 'src/assets/fonts/FrutigerLTArabic-75Black.ttf');
-const secondaryFont = path.join(process.cwd(), 'src/assets/fonts/FrutigerLTArabic-45Light.ttf');
+const COLORS = {
+    primary: '#2d2e80',
+    secondary: '#6c757d',
+    success: '#28a745',
+    warning: '#ffc107',
+    danger: '#dc3545',
+    info: '#17a2b8',
+    light: '#f8f9fa',
+    border: '#dee2e6',
+    white: '#ffffff',
+    black: '#000000'
+};
 
-// Check if fonts exist, use built-in fonts as fallback
-const primaryFontExists = fs.existsSync(primaryFont);
-const secondaryFontExists = fs.existsSync(secondaryFont);
+const STATUS_COLORS = {
+    PASSED: COLORS.success,
+    FAILED: COLORS.danger,
+    'PASSED WITH ISSUES': COLORS.warning,
+    passed: COLORS.success,
+    failed: COLORS.danger,
+    untested: COLORS.warning
+};
 
-console.log('Primary font exists:', primaryFontExists, primaryFont);
-console.log('Secondary font exists:', secondaryFontExists, secondaryFont);
+const PDF_CONFIG = {
+    margin: 40,
+    size: 'A4',
+    layout: 'landscape',
+    print_media_type: true,
+    dpi: 400
+};
 
-// Helper functions to safely set fonts
-function setPrimaryFont(doc) {
-    try {
-        if (primaryFontExists) {
-            doc.font(primaryFont);
-        } else {
+// Font management class
+class FontManager {
+    constructor() {
+        this.primaryFont = path.join(process.cwd(), 'src/assets/fonts/FrutigerLTArabic-75Black.ttf');
+        this.secondaryFont = path.join(process.cwd(), 'src/assets/fonts/FrutigerLTArabic-45Light.ttf');
+        this.primaryFontExists = fs.existsSync(this.primaryFont);
+        this.secondaryFontExists = fs.existsSync(this.secondaryFont);
+
+        console.log('Primary font exists:', this.primaryFontExists, this.primaryFont);
+        console.log('Secondary font exists:', this.secondaryFontExists, this.secondaryFont);
+    }
+
+    setPrimaryFont(doc) {
+        try {
+            if (this.primaryFontExists) {
+                doc.font(this.primaryFont);
+            } else {
+                doc.font('Helvetica-Bold');
+            }
+        } catch (error) {
             doc.font('Helvetica-Bold');
         }
-    } catch (error) {
-        doc.font('Helvetica-Bold');
+        return doc;
     }
-    return doc;
-}
 
-function setSecondaryFont(doc) {
-    try {
-        if (secondaryFontExists) {
-            doc.font(secondaryFont);
-        } else {
+    setSecondaryFont(doc) {
+        try {
+            if (this.secondaryFontExists) {
+                doc.font(this.secondaryFont);
+            } else {
+                doc.font('Helvetica');
+            }
+        } catch (error) {
             doc.font('Helvetica');
         }
-    } catch (error) {
-        doc.font('Helvetica');
+        return doc;
     }
-    return doc;
 }
 
-// ===== UTILITY FUNCTIONS =====
-function calculatePercentages(statusCounts) {
-    const total = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
-    const percentages = {};
+// Utility functions
+class Utils {
+    static calculatePercentages(statusCounts) {
+        const total = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
+        const percentages = {};
 
-    for (const [status, count] of Object.entries(statusCounts)) {
-        percentages[status] = ((count / total) * 100).toFixed(2);
-    }
-
-    return percentages;
-}
-
-function getGeneralStatusColor(generalStatus) {
-    const statusColors = {
-        'PASSED': '#4caf50',
-        'FAILED': '#f44336',
-        'PASSED WITH ISSUES': '#ff9800'
-    };
-    return statusColors[generalStatus] || 'black';
-}
-
-function getTestStatusColor(status) {
-    const statusColors = {
-        'passed': '#4caf50',
-        'failed': '#f44336',
-        'untested': '#ff9800'
-    };
-    return statusColors[status.toLowerCase()] || 'black';
-}
-
-// ===== CHART CREATION FUNCTIONS =====
-async function createStatusChart(statusCounts) {
-    const percentages = calculatePercentages(statusCounts);
-    const passedPercentage = percentages.Passed;
-
-    // Return null for chart buffer since we're not generating charts
-    return { chartBuffer: null, passedPercentage };
-}
-
-// ===== PDF GENERATION SECTIONS =====
-function addHeader(doc) {
-    const pageWidth = doc.page.width;
-    const margin = doc.page.margins.left;
-
-    // Logo section
-    const logoPath = path.join(process.cwd(), 'public/logo.png');
-    try {
-        if (fs.existsSync(logoPath)) {
-            doc.image(logoPath, margin, 40, { width: 120 });
+        for (const [status, count] of Object.entries(statusCounts)) {
+            percentages[status] = ((count / total) * 100).toFixed(2);
         }
-    } catch (error) {
-        console.error('Error loading logo:', error);
+
+        return percentages;
     }
 
-    // Title section (center-aligned for landscape)
-    setPrimaryFont(doc)
-        .fontSize(18)
-        .fillColor('#2d2e80')
-        .text('Test Summary Report', 0, 50, { width: pageWidth, align: 'center' });
+    static getStatusColor(status, isGeneral = false) {
+        const normalizedStatus = isGeneral ? status : status.toLowerCase();
+        return STATUS_COLORS[normalizedStatus] || COLORS.black;
+    }
 
-    // Date section (center-aligned under title)
-    const currentDate = new Date().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
+    static truncateText(text, maxLength) {
+        if (!text) return 'N/A';
+        return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
+    }
 
-    setSecondaryFont(doc)
-        .fontSize(12)
-        .fillColor('#6c757d')
-        .text(currentDate, 0, 75, { width: pageWidth, align: 'center' });
-
-    // Add a horizontal line separator
-    doc.moveTo(margin, 110)
-        .lineTo(pageWidth - margin, 110)
-        .strokeColor('#dee2e6')
-        .lineWidth(2)
-        .stroke();
-
-    doc.y = 130; // Set position after header
+    static getEnvironmentConfig() {
+        const isVercel = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+        const reportsDir = isVercel ? '/tmp' : path.join(__dirname, '../reports');
+        return { isVercel, reportsDir };
+    }
 }
 
-function addSubTitle(doc){
-    setPrimaryFont(doc)
-        .fontSize(20)
-        .fillColor('#2d2e80')
-        .text('Quality Assurance - Portfolio Control', {align: 'center' });
-    doc.moveDown(0.5);
-}
+// Header section builder
+class HeaderBuilder {
+    constructor(fontManager) {
+        this.fontManager = fontManager;
+    }
 
-function addLandscapeSummaryWithChart(doc, metrics, generalStatus) {
-    const pageWidth = doc.page.width;
-    const margin = doc.page.margins.left;
-    const availableWidth = pageWidth - (margin * 2);
+    build(doc) {
+        const pageWidth = doc.page.width;
+        const margin = doc.page.margins.left;
 
-    // Adjusted layout - make chart column into text/stats area
-    const leftColumnWidth = Math.floor(availableWidth * 0.35);
-    const middleColumnWidth = Math.floor(availableWidth * 0.30);
-    const rightColumnWidth = Math.floor(availableWidth * 0.35);
+        this._addLogo(doc, margin);
+        this._addTitle(doc, pageWidth);
+        this._addDate(doc, pageWidth);
+        this._addSeparator(doc, margin, pageWidth);
 
-    const summaryX = margin;
-    const middleX = margin + leftColumnWidth + 15;
-    const statsX = margin + leftColumnWidth + middleColumnWidth + 30;
+        doc.y = 130;
+    }
 
-    const contentY = doc.y;
-    const sectionHeight = 400;
+    _addLogo(doc, margin) {
+        const logoPath = path.join(process.cwd(), 'public/logo.png');
+        try {
+            if (fs.existsSync(logoPath)) {
+                doc.image(logoPath, margin, 40, { width: 120 });
+            }
+        } catch (error) {
+            console.error('Error loading logo:', error);
+        }
+    }
 
-    // ===== LEFT COLUMN: General Status & Basic Info =====
-    doc.rect(summaryX, contentY, leftColumnWidth, sectionHeight)
-        .fillColor('#f8f9fa')
-        .fill()
-        .strokeColor('#dee2e6')
-        .lineWidth(1)
-        .stroke();
+    _addTitle(doc, pageWidth) {
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(18)
+            .fillColor(COLORS.primary)
+            .text('Test Summary Report', 0, 50, { width: pageWidth, align: 'center' });
+    }
 
-    // General Status
-    const modifiedStatus = generalStatus.replace(/_/g, ' ');
-    const statusColor = getGeneralStatusColor(modifiedStatus);
-
-    const statusBoxHeight = 70;
-    doc.rect(summaryX + 15, contentY + 20, leftColumnWidth - 30, statusBoxHeight)
-        .fillColor('white')
-        .fill()
-        .strokeColor(statusColor)
-        .lineWidth(3)
-        .stroke();
-
-    setPrimaryFont(doc)
-        .fontSize(12)
-        .fillColor('#495057')
-        .text('General Status:', summaryX + 25, contentY + 35);
-
-    setPrimaryFont(doc)
-        .fontSize(12)
-        .fillColor(statusColor)
-        .text(modifiedStatus, summaryX + 25, contentY + 55);
-
-    // Pass Rate
-    const totalTests = metrics.totalCases;
-    const passRate = totalTests > 0 ? ((metrics.statusCounts.Passed / totalTests) * 100).toFixed(1) : 0;
-
-    let currentY = contentY + 110;
-    setPrimaryFont(doc)
-        .fontSize(14)
-        .fillColor('#2d2e80')
-        .text('Overview', summaryX + 20, currentY);
-
-    currentY += 30;
-    setSecondaryFont(doc)
-        .fontSize(12)
-        .fillColor('#495057')
-        .text('Pass Rate: ', summaryX + 20, currentY, { continued: true });
-
-    setPrimaryFont(doc)
-        .fillColor(passRate >= 80 ? '#28a745' : passRate >= 60 ? '#ffc107' : '#dc3545')
-        .text(`${passRate}%`);
-
-    currentY += 25;
-    setSecondaryFont(doc)
-        .fontSize(12)
-        .fillColor('#495057')
-        .text('Total Cases: ', summaryX + 20, currentY, { continued: true });
-
-    setPrimaryFont(doc)
-        .fillColor('#2d2e80')
-        .text(`${metrics.totalCases}`);
-
-    currentY += 25;
-    setSecondaryFont(doc)
-        .fontSize(12)
-        .fillColor('#495057')
-        .text('Total Bugs: ', summaryX + 20, currentY, { continued: true });
-
-    setPrimaryFont(doc)
-        .fillColor('#dc3545')
-        .text(`${metrics.bugCount}`);
-
-    // Testers section
-    const testersY = contentY + sectionHeight - 80;
-    setSecondaryFont(doc)
-        .fontSize(11)
-        .fillColor('#495057')
-        .text('Tester(s):', summaryX + 20, testersY);
-
-    if (metrics.testers && metrics.testers.length > 0) {
-        const testersText = metrics.testers.join(', ');
-        setPrimaryFont(doc)
-            .fontSize(10)
-            .fillColor('#2d2e80')
-            .text(testersText, summaryX + 20, testersY + 15, {
-            width: leftColumnWidth - 40,
-            align: 'left',
-            lineGap: 2
+    _addDate(doc, pageWidth) {
+        const currentDate = new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         });
+
+        this.fontManager.setSecondaryFont(doc)
+            .fontSize(12)
+            .fillColor(COLORS.secondary)
+            .text(currentDate, 0, 75, { width: pageWidth, align: 'center' });
     }
 
-    // ===== MIDDLE COLUMN: Text-based chart replacement =====
-    doc.rect(middleX, contentY, middleColumnWidth, sectionHeight)
-        .fillColor('#ffffff')
-        .fill()
-        .strokeColor('#dee2e6')
-        .lineWidth(1)
-        .stroke();
+    _addSeparator(doc, margin, pageWidth) {
+        doc.moveTo(margin, 110)
+            .lineTo(pageWidth - margin, 110)
+            .strokeColor(COLORS.border)
+            .lineWidth(2)
+            .stroke();
+    }
+}
 
-    setPrimaryFont(doc)
-        .fontSize(14)
-        .fillColor('#2d2e80')
-        .text('Status Distribution', middleX + 20, contentY + 20);
+// Summary section builder
+class SummaryBuilder {
+    constructor(fontManager) {
+        this.fontManager = fontManager;
+    }
 
-    let chartY = contentY + 60;
-    const stats = [
-        { label: 'Passed', value: metrics.statusCounts.Passed, color: '#28a745' },
-        { label: 'Failed', value: metrics.statusCounts.Failed, color: '#dc3545' },
-        { label: 'Untested', value: metrics.statusCounts.Untested, color: '#ffc107' },
-        { label: 'Other', value: metrics.statusCounts.Other, color: '#6c757d' }
-    ];
+    build(doc, metrics, generalStatus) {
+        const pageWidth = doc.page.width;
+        const margin = doc.page.margins.left;
+        const availableWidth = pageWidth - (margin * 2);
 
-    stats.forEach((stat, index) => {
-        const y = chartY + (index * 60);
-        const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
+        const layout = this._calculateLayout(availableWidth, margin);
 
-        // Create a visual bar representation
-        const barWidth = Math.floor((percentage / 100) * (middleColumnWidth - 80));
+        this._addSubTitle(doc);
+        const contentY = doc.y; // Get Y position AFTER subtitle
+        const sectionHeight = 400;
 
-        doc.rect(middleX + 20, y, barWidth, 20)
-            .fillColor(stat.color)
-            .fill();
+        this._buildLeftColumn(doc, layout.summaryX, contentY, layout.leftColumnWidth, sectionHeight, metrics, generalStatus);
+        this._buildMiddleColumn(doc, layout.middleX, contentY, layout.middleColumnWidth, sectionHeight, metrics);
+        this._buildRightColumn(doc, layout.statsX, contentY, layout.rightColumnWidth, sectionHeight, metrics);
 
-        setSecondaryFont(doc)
+        doc.y = contentY + sectionHeight + 30;
+    }
+
+    _calculateLayout(availableWidth, margin) {
+        const leftColumnWidth = Math.floor(availableWidth * 0.35);
+        const middleColumnWidth = Math.floor(availableWidth * 0.30);
+        const rightColumnWidth = Math.floor(availableWidth * 0.35);
+
+        return {
+            leftColumnWidth,
+            middleColumnWidth,
+            rightColumnWidth,
+            summaryX: margin,
+            middleX: margin + leftColumnWidth + 15,
+            statsX: margin + leftColumnWidth + middleColumnWidth + 30
+        };
+    }
+
+    _addSubTitle(doc) {
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(20)
+            .fillColor(COLORS.primary)
+            .text('Quality Assurance - Portfolio Control', { align: 'center' });
+        doc.moveDown(0.5);
+    }
+
+    _buildLeftColumn(doc, x, y, width, height, metrics, generalStatus) {
+        // Background
+        doc.rect(x, y, width, height)
+            .fillColor(COLORS.light)
+            .fill()
+            .strokeColor(COLORS.border)
+            .lineWidth(1)
+            .stroke();
+
+        this._addGeneralStatus(doc, x, y, width, generalStatus);
+        this._addOverviewStats(doc, x, y, metrics);
+        this._addTesters(doc, x, y, width, height, metrics);
+    }
+
+    _addGeneralStatus(doc, x, y, width, generalStatus) {
+        const modifiedStatus = generalStatus.replace(/_/g, ' ');
+        const statusColor = Utils.getStatusColor(modifiedStatus, true);
+        const statusBoxHeight = 70;
+
+        doc.rect(x + 15, y + 20, width - 30, statusBoxHeight)
+            .fillColor(COLORS.white)
+            .fill()
+            .strokeColor(statusColor)
+            .lineWidth(3)
+            .stroke();
+
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(12)
+            .fillColor('#495057')
+            .text('General Status:', x + 25, y + 35);
+
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(12)
+            .fillColor(statusColor)
+            .text(modifiedStatus, x + 25, y + 55);
+    }
+
+    _addOverviewStats(doc, x, y, metrics) {
+        const totalTests = metrics.totalCases;
+        const passRate = totalTests > 0 ? ((metrics.statusCounts.Passed / totalTests) * 100).toFixed(1) : 0;
+
+        let currentY = y + 110;
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(14)
+            .fillColor(COLORS.primary)
+            .text('Overview', x + 20, currentY);
+
+        currentY += 30;
+        this._addStatLine(doc, x + 20, currentY, 'Pass Rate: ', `${passRate}%`,
+            passRate >= 80 ? COLORS.success : passRate >= 60 ? COLORS.warning : COLORS.danger);
+
+        currentY += 25;
+        this._addStatLine(doc, x + 20, currentY, 'Total Cases: ', `${metrics.totalCases}`, COLORS.primary);
+
+        currentY += 25;
+        this._addStatLine(doc, x + 20, currentY, 'Total Bugs: ', `${metrics.bugCount}`, COLORS.danger);
+    }
+
+    _addStatLine(doc, x, y, label, value, valueColor) {
+        this.fontManager.setSecondaryFont(doc)
+            .fontSize(12)
+            .fillColor('#495057')
+            .text(label, x, y, { continued: true });
+
+        this.fontManager.setPrimaryFont(doc)
+            .fillColor(valueColor)
+            .text(value);
+    }
+
+    _addTesters(doc, x, y, width, height, metrics) {
+        const testersY = y + height - 80;
+        this.fontManager.setSecondaryFont(doc)
             .fontSize(11)
             .fillColor('#495057')
-            .text(`${stat.label}: ${stat.value} (${percentage}%)`, middleX + 20, y + 25);
-    });
+            .text('Tester(s):', x + 20, testersY);
 
-    // ===== RIGHT COLUMN: Detailed Statistics =====
-    doc.rect(statsX, contentY, rightColumnWidth, sectionHeight)
-        .fillColor('#f8f9fa')
-        .fill()
-        .strokeColor('#dee2e6')
-        .lineWidth(1)
-        .stroke();
+        if (metrics.testers && metrics.testers.length > 0) {
+            const testersText = metrics.testers.join(', ');
+            this.fontManager.setPrimaryFont(doc)
+                .fontSize(10)
+                .fillColor(COLORS.primary)
+                .text(testersText, x + 20, testersY + 15, {
+                width: width - 40,
+                align: 'left',
+                lineGap: 2
+            });
+        }
+    }
 
-    setPrimaryFont(doc)
-        .fontSize(14)
-        .fillColor('#2d2e80')
-        .text('Test Breakdown', statsX + 20, contentY + 20);
+    _buildMiddleColumn(doc, x, y, width, height, metrics) {
+        doc.rect(x, y, width, height)
+            .fillColor(COLORS.white)
+            .fill()
+            .strokeColor(COLORS.border)
+            .lineWidth(1)
+            .stroke();
 
-    currentY = contentY + 50;
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(14)
+            .fillColor(COLORS.primary)
+            .text('Status Distribution', x + 20, y + 20);
 
-    stats.forEach((stat, index) => {
-        const y = currentY + (index * 35);
-        const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
+        this._addStatusBars(doc, x, y, width, metrics);
+    }
 
-        setSecondaryFont(doc)
-            .fontSize(12)
-            .fillColor('#495057')
-            .text(`${stat.label}:`, statsX + 40, y + 2);
+    _addStatusBars(doc, x, y, width, metrics) {
+        const totalTests = metrics.totalCases;
+        let chartY = y + 60;
 
-        setPrimaryFont(doc)
-            .fontSize(12)
-            .fillColor(stat.color)
-            .text(`${stat.value} (${percentage}%)`, statsX + 40, y + 16);
-    });
+        const stats = [
+            { label: 'Passed', value: metrics.statusCounts.Passed, color: COLORS.success },
+            { label: 'Failed', value: metrics.statusCounts.Failed, color: COLORS.danger },
+            { label: 'Untested', value: metrics.statusCounts.Untested, color: COLORS.warning },
+            { label: 'Other', value: metrics.statusCounts.Other, color: COLORS.secondary }
+        ];
 
-    // Update document position
-    doc.y = contentY + sectionHeight + 30;
-}
+        stats.forEach((stat, index) => {
+            const barY = chartY + (index * 60);
+            const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
+            const barWidth = Math.floor((percentage / 100) * (width - 80));
 
-async function addLandscapeChart(doc, metrics) {
-    // Since we removed chart generation, we'll skip this function
-    // The visual representation is now handled in addLandscapeSummaryWithChart
-    return;
-}
+            doc.rect(x + 20, barY, barWidth, 20)
+                .fillColor(stat.color)
+                .fill();
 
-function addLandscapeDetailedTable(doc, data) {
-    doc.addPage();
-
-    setPrimaryFont(doc)
-        .fontSize(18)
-        .fillColor('#2d2e80')
-        .text('Detailed Test Cases', { align: 'center' })
-        .moveDown(0.5);
-
-    // Enhanced table configuration for landscape
-    const pageWidth = doc.page.width;
-    const margin = doc.page.margins.left;
-    const availableWidth = pageWidth - (margin * 2);
-
-    const tableTop = doc.y;
-    const colWidths = {
-        test: Math.floor(availableWidth * 0.45),
-        status: Math.floor(availableWidth * 0.15),
-        ticket: Math.floor(availableWidth * 0.18),
-        bugs: Math.floor(availableWidth * 0.22)
-    };
-
-    const totalTableWidth = Object.values(colWidths).reduce((sum, width) => sum + width, 0);
-
-    // Draw table headers with proper styling
-    const headerHeight = 35;
-
-    // Draw header background
-    doc.rect(margin, tableTop, totalTableWidth, headerHeight)
-        .fillColor('#2d2e80')
-        .fill();
-
-    // Set text properties for headers
-    setPrimaryFont(doc)
-        .fontSize(12)
-        .fillColor('white'); // Ensure white text color
-
-    let currentX = margin;
-    const headers = ['Test Case', 'Status', 'Ticket', 'Bugs'];
-    const widths = Object.values(colWidths);
-
-    headers.forEach((header, index) => {
-        // Add text with proper vertical centering
-        const textY = tableTop + (headerHeight - 12) / 2; // Center text vertically
-        doc.text(header, currentX + 8, textY, {
-            width: widths[index] - 16,
-            align: 'left'
+            this.fontManager.setSecondaryFont(doc)
+                .fontSize(11)
+                .fillColor('#495057')
+                .text(`${stat.label}: ${stat.value} (${percentage}%)`, x + 20, barY + 25);
         });
-        currentX += widths[index];
-    });
+    }
 
-    // Draw header border
-    doc.strokeColor('#dee2e6')
-        .lineWidth(1)
-        .rect(margin, tableTop, totalTableWidth, headerHeight)
-        .stroke();
+    _buildRightColumn(doc, x, y, width, height, metrics) {
+        doc.rect(x-30, y, width, height)
+            .fillColor(COLORS.light)
+            .fill()
+            .strokeColor(COLORS.border)
+            .lineWidth(1)
+            .stroke();
 
-    // Reset position for table rows
-    doc.y = tableTop + headerHeight;
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(14)
+            .fillColor(COLORS.primary)
+            .text('Test Breakdown', x + 20, y + 20);
 
-    // Calculate how many rows can fit per page
-    const availableHeight = doc.page.height - doc.y - margin;
-    const rowHeight = 35;
-    const maxRowsPerPage = Math.floor(availableHeight / rowHeight);
+        this._addDetailedStats(doc, x, y, metrics);
+    }
 
-    // Draw table rows with pagination
-    const totalRows = Math.min(data.length, 50); // Limit to 50 rows max
-    let currentRow = 0;
+    _addDetailedStats(doc, x, y, metrics) {
+        const totalTests = metrics.totalCases;
+        let currentY = y + 50;
 
-    while (currentRow < totalRows) {
-        const rowsOnThisPage = Math.min(maxRowsPerPage, totalRows - currentRow);
+        const stats = [
+            { label: 'Passed', value: metrics.statusCounts.Passed, color: COLORS.success },
+            { label: 'Failed', value: metrics.statusCounts.Failed, color: COLORS.danger },
+            { label: 'Untested', value: metrics.statusCounts.Untested, color: COLORS.warning },
+            { label: 'Other', value: metrics.statusCounts.Other, color: COLORS.secondary }
+        ];
 
-        for (let i = 0; i < rowsOnThisPage; i++) {
-            const row = data[currentRow + i];
+        stats.forEach((stat, index) => {
+            const statY = currentY + (index * 35);
+            const percentage = totalTests > 0 ? ((stat.value / totalTests) * 100).toFixed(1) : 0;
+
+            this.fontManager.setSecondaryFont(doc)
+                .fontSize(12)
+                .fillColor('#495057')
+                .text(`${stat.label}:`, x + 40, statY + 2);
+
+            this.fontManager.setPrimaryFont(doc)
+                .fontSize(12)
+                .fillColor(stat.color)
+                .text(`${stat.value} (${percentage}%)`, x + 40, statY + 16);
+        });
+    }
+}
+
+// Table builder class
+class TableBuilder {
+    constructor(fontManager) {
+        this.fontManager = fontManager;
+    }
+
+    build(doc, data) {
+        doc.addPage();
+        this._addTableTitle(doc);
+
+        const layout = this._calculateTableLayout(doc);
+        this._buildTableHeader(doc, layout);
+        this._buildTableRows(doc, data, layout);
+    }
+
+    _addTableTitle(doc) {
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(18)
+            .fillColor(COLORS.primary)
+            .text('Detailed Test Cases', { align: 'center' })
+            .moveDown(0.5);
+    }
+
+    _calculateTableLayout(doc) {
+        const pageWidth = doc.page.width;
+        const margin = doc.page.margins.left;
+        const availableWidth = pageWidth - (margin * 2);
+
+        const colWidths = {
+            test: Math.floor(availableWidth * 0.45),
+            status: Math.floor(availableWidth * 0.15),
+            ticket: Math.floor(availableWidth * 0.18),
+            bugs: Math.floor(availableWidth * 0.22)
+        };
+
+        const totalTableWidth = Object.values(colWidths).reduce((sum, width) => sum + width, 0);
+
+        return {
+            margin,
+            pageWidth,
+            availableWidth,
+            colWidths,
+            totalTableWidth,
+            headers: ['Test Case', 'Status', 'Ticket', 'Bugs'],
+            widths: Object.values(colWidths),
+            rowHeight: 35,
+            headerHeight: 35
+        };
+    }
+
+    _buildTableHeader(doc, layout) {
+        const tableTop = doc.y;
+
+        // Header background
+        doc.rect(layout.margin, tableTop, layout.totalTableWidth, layout.headerHeight)
+            .fillColor(COLORS.primary)
+            .fill();
+
+        // Header text
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(12)
+            .fillColor(COLORS.white);
+
+        let currentX = layout.margin;
+        layout.headers.forEach((header, index) => {
+            const textY = tableTop + (layout.headerHeight - 12) / 2;
+            doc.text(header, currentX + 8, textY, {
+                width: layout.widths[index] - 16,
+                align: 'left'
+            });
+            currentX += layout.widths[index];
+        });
+
+        // Header border
+        doc.strokeColor(COLORS.border)
+            .lineWidth(1)
+            .rect(layout.margin, tableTop, layout.totalTableWidth, layout.headerHeight)
+            .stroke();
+
+        doc.y = tableTop + layout.headerHeight;
+    }
+
+    _buildTableRows(doc, data, layout) {
+        const availableHeight = doc.page.height - doc.y - layout.margin;
+        const maxRowsPerPage = Math.floor(availableHeight / layout.rowHeight);
+        const totalRows = Math.min(data.length, 50);
+        let currentRow = 0;
+
+        while (currentRow < totalRows) {
+            const rowsOnThisPage = Math.min(maxRowsPerPage, totalRows - currentRow);
+            this._drawRowsOnPage(doc, data, layout, currentRow, rowsOnThisPage);
+            currentRow += rowsOnThisPage;
+
+            if (currentRow < totalRows) {
+                doc.addPage();
+                doc.y = layout.margin + 50;
+            }
+        }
+    }
+
+    _drawRowsOnPage(doc, data, layout, startRow, rowCount) {
+        for (let i = 0; i < rowCount; i++) {
+            const row = data[startRow + i];
             const rowY = doc.y;
 
-            // Alternate row colors
-            const fillColor = i % 2 === 0 ? '#f8f9fa' : 'white';
-            doc.rect(margin, rowY, totalTableWidth, rowHeight).fillColor(fillColor).fill();
+            this._drawRowBackground(doc, layout, rowY, i);
+            this._drawRowBorders(doc, layout, rowY);
+            this._drawRowContent(doc, layout, row, rowY);
 
-            // Draw cell borders
-            doc.strokeColor('#dee2e6').lineWidth(0.5);
-            let lineX = margin;
+            doc.y = rowY + layout.rowHeight;
+        }
+    }
 
-            // Vertical lines
-            for (let j = 0; j <= 4; j++) {
-                doc.moveTo(lineX, rowY).lineTo(lineX, rowY + rowHeight).stroke();
-                if (j < 4) {
-                    lineX += widths[j];
-                }
+    _drawRowBackground(doc, layout, rowY, rowIndex) {
+        const fillColor = rowIndex % 2 === 0 ? COLORS.light : COLORS.white;
+        doc.rect(layout.margin, rowY, layout.totalTableWidth, layout.rowHeight)
+            .fillColor(fillColor)
+            .fill();
+    }
+
+    _drawRowBorders(doc, layout, rowY) {
+        doc.strokeColor(COLORS.border).lineWidth(0.5);
+
+        // Vertical lines
+        let lineX = layout.margin;
+        for (let j = 0; j <= 4; j++) {
+            doc.moveTo(lineX, rowY)
+                .lineTo(lineX, rowY + layout.rowHeight)
+                .stroke();
+            if (j < 4) {
+                lineX += layout.widths[j];
             }
-
-            // Horizontal line
-            doc.moveTo(margin, rowY + rowHeight).lineTo(margin + totalTableWidth, rowY + rowHeight).stroke();
-
-            // Add cell content
-            doc.fontSize(10);
-            currentX = margin;
-
-            // Test case name
-            const testName = row["Test"] || 'N/A';
-            const maxTestChars = Math.floor(colWidths.test / 6); // Approximate chars that fit
-            const truncatedTest = testName.length > maxTestChars ? testName.substring(0, maxTestChars - 3) + '...' : testName;
-            doc.fillColor('black').text(truncatedTest, currentX + 8, rowY + 10, { width: colWidths.test - 16 });
-            currentX += colWidths.test;
-
-            // Status with color
-            const status = row["Status"] || 'N/A';
-            const statusColor = getTestStatusColor(status);
-            setPrimaryFont(doc)
-                .fillColor(statusColor)
-                .text(status, currentX + 8, rowY + 10, { width: colWidths.status - 16 });
-            currentX += colWidths.status;
-
-            // Ticket
-            const ticket = row["Issues (case)"] || 'None';
-            setSecondaryFont(doc)
-                .fillColor('black')
-                .text(ticket, currentX + 8, rowY + 10, { width: colWidths.ticket - 16 });
-            currentX += colWidths.ticket;
-
-            // Bugs
-            const bugs = row["bugs"] || 'None';
-            const maxBugChars = Math.floor(colWidths.bugs / 6);
-            const truncatedBugs = bugs.length > maxBugChars ? bugs.substring(0, maxBugChars - 3) + '...' : bugs;
-            doc.text(truncatedBugs, currentX + 8, rowY + 10, { width: colWidths.bugs - 16 });
-
-            doc.y = rowY + rowHeight;
         }
 
-        currentRow += rowsOnThisPage;
+        // Horizontal line
+        doc.moveTo(layout.margin, rowY + layout.rowHeight)
+            .lineTo(layout.margin + layout.totalTableWidth, rowY + layout.rowHeight)
+            .stroke();
+    }
 
-        // Add new page if there are more rows
-        if (currentRow < totalRows) {
-            doc.addPage();
-            doc.y = margin + 50; // Leave space at top of new page
-        }
+    _drawRowContent(doc, layout, row, rowY) {
+        doc.fontSize(10);
+        let currentX = layout.margin;
+
+        // Test case name
+        const testName = Utils.truncateText(row["Test"], Math.floor(layout.colWidths.test / 6));
+        doc.fillColor(COLORS.black)
+            .text(testName, currentX + 8, rowY + 10, { width: layout.colWidths.test - 16 });
+        currentX += layout.colWidths.test;
+
+        // Status with color
+        const status = row["Status"] || 'N/A';
+        const statusColor = Utils.getStatusColor(status);
+        this.fontManager.setPrimaryFont(doc)
+            .fillColor(statusColor)
+            .text(status, currentX + 8, rowY + 10, { width: layout.colWidths.status - 16 });
+        currentX += layout.colWidths.status;
+
+        // Ticket
+        const ticket = row["Issues (case)"] || 'None';
+        this.fontManager.setSecondaryFont(doc)
+            .fillColor(COLORS.black)
+            .text(ticket, currentX + 8, rowY + 10, { width: layout.colWidths.ticket - 16 });
+        currentX += layout.colWidths.ticket;
+
+        // Bugs
+        const bugs = Utils.truncateText(row["bugs"], Math.floor(layout.colWidths.bugs / 6));
+        doc.text(bugs, currentX + 8, rowY + 10, { width: layout.colWidths.bugs - 16 });
     }
 }
 
-function addNotes(doc, notes) {
-    if (!notes || notes.trim() === '') {
-        return;
+// Notes builder class
+class NotesBuilder {
+    constructor(fontManager) {
+        this.fontManager = fontManager;
     }
 
-    doc.addPage();
-
-    setPrimaryFont(doc)
-        .fontSize(18)
-        .fillColor('#2d2e80')
-        .text('Notes', { align: 'center' })
-        .moveDown(1);
-
-    // Create a bordered box for notes in landscape
-    const pageWidth = doc.page.width;
-    const margin = doc.page.margins.left;
-    const availableWidth = pageWidth - (margin * 2);
-    const notesHeight = 400;
-
-    doc.rect(margin, doc.y, availableWidth, notesHeight)
-        .fillColor('#f8f9fa')
-        .fill()
-        .strokeColor('#dee2e6')
-        .lineWidth(1)
-        .stroke();
-
-    setSecondaryFont(doc)
-        .fontSize(12)
-        .fillColor('black')
-        .text(notes.trim(), margin + 20, doc.y + 20, {
-        width: availableWidth - 40,
-        align: 'justify',
-        lineGap: 3
-    });
-}
-
-export default async function generatePdf(data, metrics, generalStatus, notes) {
-    // MAIN CHANGE: Set page size to landscape
-    const doc = new PDFDocument({
-        margin: 40,
-        size: 'A4',
-        layout: 'landscape',
-        print_media_type: true,
-        dpi: 400
-    });
-
-    // For Vercel, use /tmp directory which is writable
-    const isVercel = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
-    const reportsDir = isVercel ? '/tmp' : path.join(__dirname, '../reports');
-
-    // Ensure reports directory exists (only for local development)
-    if (!isVercel) {
-        await fs.ensureDir(reportsDir);
-    }
-
-    const filePath = path.join(reportsDir, `report_${Date.now()}.pdf`);
-    const writeStream = fs.createWriteStream(filePath);
-    doc.pipe(writeStream);
-
-    try {
-        // Enhanced front page with landscape layout
-        addHeader(doc);
-        addSubTitle(doc);
-        addLandscapeSummaryWithChart(doc, metrics, generalStatus);
-        await addLandscapeChart(doc, metrics);
-
-        // Detailed table with landscape optimization
-        addLandscapeDetailedTable(doc, data);
-
-        // Notes page if provided
-        if (notes && notes.trim() !== '') {
-            addNotes(doc, notes);
+    build(doc, notes) {
+        if (!notes || notes.trim() === '') {
+            return;
         }
 
-        doc.end();
+        doc.addPage();
 
-        return new Promise((resolve, reject) => {
-            writeStream.on('finish', () => resolve(filePath));
-            writeStream.on('error', reject);
+        this.fontManager.setPrimaryFont(doc)
+            .fontSize(18)
+            .fillColor(COLORS.primary)
+            .text('Notes', { align: 'center' })
+            .moveDown(1);
+
+        const layout = this._calculateNotesLayout(doc);
+        this._drawNotesBox(doc, layout, notes);
+    }
+
+    _calculateNotesLayout(doc) {
+        const pageWidth = doc.page.width;
+        const margin = doc.page.margins.left;
+        const availableWidth = pageWidth - (margin * 2);
+        const notesHeight = 400;
+
+        return { margin, availableWidth, notesHeight };
+    }
+
+    _drawNotesBox(doc, layout, notes) {
+        doc.rect(layout.margin, doc.y, layout.availableWidth, layout.notesHeight)
+            .fillColor(COLORS.light)
+            .fill()
+            .strokeColor(COLORS.border)
+            .lineWidth(1)
+            .stroke();
+
+        this.fontManager.setSecondaryFont(doc)
+            .fontSize(12)
+            .fillColor(COLORS.black)
+            .text(notes.trim(), layout.margin + 20, doc.y + 20, {
+            width: layout.availableWidth - 40,
+            align: 'justify',
+            lineGap: 3
         });
-    } catch (error) {
-        console.error('Error generating PDF:', error);
-        throw error;
     }
+}
+
+// Main PDF Generator class
+class PDFGenerator {
+    constructor() {
+        this.fontManager = new FontManager();
+        this.headerBuilder = new HeaderBuilder(this.fontManager);
+        this.summaryBuilder = new SummaryBuilder(this.fontManager);
+        this.tableBuilder = new TableBuilder(this.fontManager);
+        this.notesBuilder = new NotesBuilder(this.fontManager);
+    }
+
+    async generate(data, metrics, generalStatus, notes) {
+        const doc = new PDFDocument(PDF_CONFIG);
+        const { isVercel, reportsDir } = Utils.getEnvironmentConfig();
+
+        if (!isVercel) {
+            await fs.ensureDir(reportsDir);
+        }
+
+        const filePath = path.join(reportsDir, `report_${Date.now()}.pdf`);
+        const writeStream = fs.createWriteStream(filePath);
+        doc.pipe(writeStream);
+
+        try {
+            // Build PDF sections
+            this.headerBuilder.build(doc);
+            this.summaryBuilder.build(doc, metrics, generalStatus);
+            this.tableBuilder.build(doc, data);
+            this.notesBuilder.build(doc, notes);
+
+            doc.end();
+
+            return new Promise((resolve, reject) => {
+                writeStream.on('finish', () => resolve(filePath));
+                writeStream.on('error', reject);
+            });
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            throw error;
+        }
+    }
+}
+
+// Export the main function
+export default async function generatePdf(data, metrics, generalStatus, notes) {
+    const generator = new PDFGenerator();
+    return await generator.generate(data, metrics, generalStatus, notes);
 }
