@@ -183,23 +183,19 @@ class SummaryBuilder {
 
         this._buildLeftColumn(doc, layout.summaryX, contentY, layout.leftColumnWidth, sectionHeight, metrics, generalStatus);
         this._buildMiddleColumn(doc, layout.middleX, contentY, layout.middleColumnWidth, sectionHeight, metrics);
-        this._buildRightColumn(doc, layout.statsX, contentY, layout.rightColumnWidth, sectionHeight, metrics);
 
         doc.y = contentY + sectionHeight + 30;
     }
 
     _calculateLayout(availableWidth, margin) {
-        const leftColumnWidth = Math.floor(availableWidth * 0.35);
-        const middleColumnWidth = Math.floor(availableWidth * 0.30);
-        const rightColumnWidth = Math.floor(availableWidth * 0.35);
+        const leftColumnWidth = Math.floor(availableWidth * 0.5);
+        const middleColumnWidth = Math.floor(availableWidth * 0.5);
 
         return {
             leftColumnWidth,
             middleColumnWidth,
-            rightColumnWidth,
             summaryX: margin,
-            middleX: margin + leftColumnWidth + 15,
-            statsX: margin + leftColumnWidth + middleColumnWidth + 30
+            middleX: margin + leftColumnWidth + 20,
         };
     }
 
